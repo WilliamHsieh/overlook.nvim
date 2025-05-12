@@ -1,0 +1,5 @@
+---@class OverlookPopupOptions
+---@field target_bufnr integer The buffer number to display in the popup.
+---@field lnum integer The line number to position the popup.
+---@field col integer The column number to position the popup.
+---@field title? string Optional title for the popup.

@@ -8,6 +8,7 @@ local M = {}
 ---| "rounded"
 ---| "solid"
 ---| "shadow"
+---| string[]
 
 ---@class OverlookUiOptions
 ---@field border OverlookBorderStyle Border style for popups.

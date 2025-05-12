@@ -1,7 +1,38 @@
 ---@module "plenary"
 
-local config = require("overlook.config")
-local stack = require("overlook.stack")
+--[[-
+  Setup critical mocks for modules that are required at the top level by 'overlook.ui'
+  or its dependencies (like 'overlook.popup'). This ensures that when these modules
+  execute their initial 'require' statements, they get the mocked versions.
+--]]
+local initial_mock_ui_config_table = {
+  border = "double",
+  z_index_base = 50,
+  col_offset = 1,
+  row_offset = 1,
+  size_ratio = 0.8,
+  min_width = 10, -- Default mock min_width
+  min_height = 5, -- Default mock min_height
+  width_decrement = 2,
+  height_decrement = 1,
+  stack_row_offset = 1,
+  stack_col_offset = 1,
+}
+local global_mock_config_data = { ui = initial_mock_ui_config_table }
+local global_mock_config_module = {
+  options = global_mock_config_data, -- Store the data table here
+  get = function()
+    return global_mock_config_data -- Always return the same data table
+  end,
+  -- Helper for tests to reset the mock config to its initial state if needed
+  reset_to_initial_state = function()
+    global_mock_config_data.ui = vim.deepcopy(initial_mock_ui_config_table)
+  end,
+}
+package.loaded["overlook.config"] = global_mock_config_module
+
+-- Now, when 'overlook.ui' and 'overlook.popup' are required, they'll get the mocked config.
+local stack_module_ref_for_reset = require("overlook.stack") -- Keep ref to original for reset
 local ui = require("overlook.ui")
 
 local orig_api = {}
@@ -26,73 +57,51 @@ local function setup_mocks()
     stack_push = nil,
   }
 
-  -- Clear stack state directly
-  stack.stack = {}
-  stack.original_win_id = nil
+  -- Clear stack state directly (using a local reference to the stack module)
+  stack_module_ref_for_reset.stack = {}
+  stack_module_ref_for_reset.original_win_id = nil
 
-  -- Mock config loading FIRST (Use a plain table)
-  local mock_ui_config = {
-    border = "double",
-    z_index_base = 50,
-    col_offset = 1,
-    row_offset = 1,
-    size_ratio = 0.8,
-    min_width = 10,
-    min_height = 5,
-    width_decrement = 2,
-    height_decrement = 1,
-    stack_row_offset = 1,
-    stack_col_offset = 1,
-  }
-  local mock_config_options = { ui = mock_ui_config }
-  -- Create a mock module with a 'get' function
-  local mock_config_mod = {
-    options = mock_config_options, -- Keep options for direct access if needed
-    get = function()
-      return mock_config_options -- Return the options table
-    end,
-  }
-  package.loaded["overlook.config"] = mock_config_mod
+  -- Reset our global mock config to its defined initial state for consistency
+  global_mock_config_module.reset_to_initial_state()
 
-  -- Mock stack module FIRST (Use a plain table with manual tracking if needed)
+  -- Mock stack module (ensure this is done correctly if stack is also a dependency of popup)
+  -- For now, assuming the main issue was config. If stack needs similar pre-mocking, adjust.
   local stack_push_called = false
-  local mock_stack_mod = {}
-  mock_stack_mod.size = function()
-    return #stack.stack
+  local test_mock_stack_mod = {}
+  test_mock_stack_mod.size = function()
+    return #stack_module_ref_for_reset.stack
   end
-  mock_stack_mod.push = function(popup_info)
+  test_mock_stack_mod.push = function(popup_info)
     stack_push_called = true
     mock_call_args.stack_push = vim.deepcopy(popup_info) -- Store args
-    table.insert(stack.stack, popup_info) -- Simulate actual push for size()
+    table.insert(stack_module_ref_for_reset.stack, popup_info) -- Simulate actual push for size()
   end
-  mock_stack_mod.top = function()
-    if #stack.stack == 0 then
+  test_mock_stack_mod.top = function()
+    if #stack_module_ref_for_reset.stack == 0 then
       return nil
     end
-    return stack.stack[#stack.stack]
+    return stack_module_ref_for_reset.stack[#stack_module_ref_for_reset.stack]
   end
-  mock_stack_mod.find_by_win = stack.find_by_win
-  mock_stack_mod.handle_win_close = stack.handle_win_close
-  mock_stack_mod.close_all = stack.clear
-  mock_stack_mod._push_called_flag = function()
+  test_mock_stack_mod.find_by_win = stack_module_ref_for_reset.find_by_win
+  test_mock_stack_mod.handle_win_close = stack_module_ref_for_reset.handle_win_close
+  test_mock_stack_mod.close_all = stack_module_ref_for_reset.clear -- Assuming stack.clear is the intended function
+  test_mock_stack_mod._push_called_flag = function()
     return stack_push_called
   end
-
-  package.loaded["overlook.stack"] = mock_stack_mod
+  package.loaded["overlook.stack"] = test_mock_stack_mod
 
   -- Mock essential API calls LAST (Manual Mocks)
-  -- Helper to simplify saving original and assigning mock
-  local function mock_api(name, mock_fn)
+  local function mock_api(name, mock_fn_impl) -- Renamed mock_fn to mock_fn_impl
     if vim.api[name] then
       orig_api[name] = vim.api[name]
     end
-    vim.api[name] = mock_fn
+    vim.api[name] = mock_fn_impl
   end
-  local function mock_fn(name, mock_fn)
+  local function mock_fn(name, mock_fn_impl) -- Renamed mock_fn to mock_fn_impl
     if vim.fn[name] then
       orig_fn[name] = vim.fn[name]
     end
-    vim.fn[name] = mock_fn
+    vim.fn[name] = mock_fn_impl
   end
 
   mock_api("nvim_get_current_win", function()
@@ -187,9 +196,12 @@ describe("overlook.ui", function()
     orig_api = {}
     orig_fn = {}
 
-    -- Reset replaced modules
-    package.loaded["overlook.config"] = config
-    package.loaded["overlook.stack"] = stack
+    -- Reset replaced modules to their state before this spec file's influence
+    -- For config, it was mocked globally, so we ensure it's reset or tests might interfere.
+    global_mock_config_module.reset_to_initial_state()
+    -- If other modules were globally mocked (like stack potentially), reset them too.
+    -- For stack, we restore the original module that was loaded by this test file.
+    package.loaded["overlook.stack"] = stack_module_ref_for_reset
     collectgarbage()
   end)
 
@@ -303,17 +315,15 @@ describe("overlook.ui", function()
     vim.fn.screenpos = function(_, _, _)
       return { row = 3, col = 3 }
     end
-    -- Modify the config JUST for this test run (may be affected by caching)
-    local cfg = package.loaded["overlook.config"]
-    local original_min_w = cfg.options.ui.min_width
-    local original_min_h = cfg.options.ui.min_height
-    cfg.options.ui.min_width = 15
-    cfg.options.ui.min_height = 7
+
+    -- Modify the globally mocked config for this test
+    -- The 'global_mock_config_module' is what 'Popup' instances will see.
+    global_mock_config_module.options.ui.min_width = 15
+    global_mock_config_module.options.ui.min_height = 7
+
     -- Act
     local result = ui.create_popup { target_bufnr = 1, lnum = 1, col = 1 }
-    -- Restore original config values for subsequent tests
-    cfg.options.ui.min_width = original_min_w
-    cfg.options.ui.min_height = original_min_h
+
     -- Assert
     assert.is_not_nil(result)
     assert.is_not_nil(mock_call_args.nvim_open_win)
