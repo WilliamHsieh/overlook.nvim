@@ -83,16 +83,16 @@ function Popup:config_for_first_popup()
   local cursor_abs_screen_pos = vim.fn.screenpos(current_win_id, cursor_buf_pos[1], cursor_buf_pos[2] + 1)
   local win_pos = api.nvim_win_get_position(current_win_id)
 
-  -- n'th row and column of the cursor in the current window
-  local cursor_relative_screen_row = cursor_abs_screen_pos.row - win_pos[1] - 1
-  local cursor_relative_screen_col = cursor_abs_screen_pos.col - win_pos[2] - 1
-
-  local max_window_height = api.nvim_win_get_height(current_win_id) - (vim.o.winbar ~= "" and 1 or 0)
+  -- distance from the top of the window to the cursor (including winbar)
+  local winbar_enabled = vim.o.winbar ~= ""
+  local max_window_height = api.nvim_win_get_height(current_win_id) - (winbar_enabled and 1 or 0)
   local max_window_width = api.nvim_win_get_width(current_win_id)
-  local place_above = cursor_relative_screen_row > max_window_height / 2
 
-  local screen_space_above = cursor_relative_screen_row - 1
-  local screen_space_below = max_window_height - cursor_relative_screen_row
+  local screen_space_above = cursor_abs_screen_pos.row - win_pos[1] - 1 - (winbar_enabled and 1 or 0)
+  local screen_space_below = max_window_height - screen_space_above - 1
+  local screen_space_left = cursor_abs_screen_pos.col - win_pos[2] - 1
+
+  local place_above = screen_space_above > max_window_height / 2
 
   local border_overhead = Config.ui.border ~= "none" and 2 or 0
   local max_fittable_content_height = (place_above and screen_space_above or screen_space_below) - border_overhead
@@ -114,13 +114,13 @@ function Popup:config_for_first_popup()
 
     win = current_win_id,
     zindex = Config.ui.z_index_base,
-    col = cursor_relative_screen_col + Config.ui.col_offset,
+    col = screen_space_left + Config.ui.col_offset,
   }
 
   if place_above then
-    win_config.row = math.max(0, cursor_relative_screen_row - 1 - height - border_overhead - Config.ui.row_offset)
+    win_config.row = math.max(0, screen_space_above - height - border_overhead - Config.ui.row_offset)
   else
-    win_config.row = cursor_relative_screen_row + Config.ui.row_offset
+    win_config.row = screen_space_above + 1 + Config.ui.row_offset
   end
 
   -- Store calculated dimensions for potential fallback and stack item
