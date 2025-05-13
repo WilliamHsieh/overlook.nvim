@@ -134,42 +134,28 @@ function Popup:config_for_first_popup()
 end
 
 --- Calculates the window configuration for subsequent (stacked) popups.
----@param prev_popup_data table { win_id: integer, width: number, height: number, row: number, col: number }
+---@param prev OverlookStackItem Previous popup item from the stack
 ---@return table? win_config Neovim window configuration table, or nil if an error occurs
-function Popup:config_for_stacked_popup(prev_popup_data)
-  local win_config = { relative = "win", style = "minimal", focusable = true }
-  win_config.zindex = Config.ui.z_index_base + Stack.size()
+function Popup:config_for_stacked_popup(prev)
+  local win_config = {
+    relative = "win",
+    style = "minimal",
+    focusable = true,
+    win = prev.win_id,
+    zindex = Config.ui.z_index_base + Stack.size(),
 
-  if
-    not prev_popup_data
-    or prev_popup_data.width == nil
-    or prev_popup_data.height == nil
-    or prev_popup_data.row == nil
-    or prev_popup_data.col == nil
-  then
-    -- vim.notify("Overlook: Invalid previous popup data for stacking.", vim.log.levels.ERROR)
-    return nil
-  end
+    width = math.max(Config.ui.min_width, prev.width - Config.ui.width_decrement),
+    height = math.max(Config.ui.min_height, prev.height - Config.ui.height_decrement),
 
-  win_config.win = prev_popup_data.win_id -- Anchor to previous popup\'s window
-
-  local width = math.max(Config.ui.min_width, prev_popup_data.width - Config.ui.width_decrement)
-  local height = math.max(Config.ui.min_height, prev_popup_data.height - Config.ui.height_decrement)
-
-  local prev_winbar_enabled = vim.api.nvim_get_option_value("winbar", { win = prev_popup_data.win_id }) ~= ""
-  local row = Config.ui.stack_row_offset - (prev_winbar_enabled and 1 or 0)
-  local col_abs = Config.ui.stack_col_offset
-
-  win_config.width = width + 1 -- Original logic maintained
-  win_config.height = height
-  win_config.row = row
-  win_config.col = col_abs
+    row = Config.ui.stack_row_offset - 1,
+    col = Config.ui.stack_col_offset,
+  }
 
   -- Store calculated dimensions for potential fallback and stack item
-  self.calculated_width = width + 1
-  self.calculated_height = height
-  self.calculated_row = row
-  self.calculated_col = col_abs
+  self.calculated_width = win_config.width
+  self.calculated_height = win_config.height
+  self.calculated_row = win_config.row
+  self.calculated_col = win_config.row
   self.orginal_win_id = nil -- Not applicable for stacked popups
 
   return win_config
