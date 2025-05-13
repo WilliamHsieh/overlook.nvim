@@ -56,7 +56,7 @@ M.options = {
     stack_col_offset = 0,
 
     -- Amount by which the width decreases for each subsequent popup in the stack.
-    width_decrement = 2,
+    width_decrement = 1,
     -- Amount by which the height decreases for each subsequent popup in the stack.
     height_decrement = 1,
 
