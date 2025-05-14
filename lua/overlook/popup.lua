@@ -147,7 +147,7 @@ function Popup:config_for_stacked_popup(prev)
     width = math.max(Config.ui.min_width, prev.width - Config.ui.width_decrement),
     height = math.max(Config.ui.min_height, prev.height - Config.ui.height_decrement),
 
-    row = Config.ui.stack_row_offset - 1,
+    row = Config.ui.stack_row_offset - (vim.o.winbar ~= "" and 1 or 0),
     col = Config.ui.stack_col_offset,
   }
 
