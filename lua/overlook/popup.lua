@@ -11,18 +11,10 @@ local augroup_id = api.nvim_create_augroup("OverlookPopupClose", { clear = true 
 ---@field opts OverlookPopupOptions
 ---@field win_id? integer Neovim window ID for the popup
 ---@field pre_open_win_id? integer Neovim window ID of the window that was current before opening the popup
----@field win_config vim.api.keyset.win_config Neovim window configuration table for `nvim_open_win()`
+---@field win_config vim.api.keyset.win_config window configuration table for `nvim_open_win()`
+---@field actual_win_config? vim.api.keyset.win_config window configuration table after `nvim_win_get_config()`
 ---@field is_first_popup boolean
----@field calculated_width? number
----@field calculated_height? number
----@field calculated_row? number
----@field calculated_col? number
 ---@field orginal_win_id? integer
----@field final_width? number
----@field final_height? number
----@field final_row? number
----@field final_col? number
----@field geometry_source string "api", "calculated_fallback", "api_failed", or "none"
 local Popup = {}
 Popup.__index = Popup
 
@@ -47,17 +39,9 @@ function Popup.new(opts)
   end
 
   this:configure_opened_window_details()
-
-  if not this:acquire_final_geometry_and_validate() then
-    this:cleanup_opened_window(true) -- Force close the created window
-    if this.pre_open_win_id and api.nvim_win_is_valid(this.pre_open_win_id) then
-      api.nvim_set_current_win(this.pre_open_win_id) -- Restore original window focus
-    end
-    return nil
-  end
-
-  this:register_with_stack_manager()
   this:create_close_autocommand()
+
+  this.actual_win_config = api.nvim_win_get_config(this.win_id)
 
   return this
 end
@@ -123,11 +107,6 @@ function Popup:config_for_first_popup()
     win_config.row = screen_space_above + 1 + Config.ui.row_offset
   end
 
-  -- Store calculated dimensions for potential fallback and stack item
-  self.calculated_width = width
-  self.calculated_height = height
-  self.calculated_row = win_config.row
-  self.calculated_col = win_config.col
   self.orginal_win_id = current_win_id
 
   return win_config
@@ -150,13 +129,6 @@ function Popup:config_for_stacked_popup(prev)
     row = Config.ui.stack_row_offset - (vim.o.winbar ~= "" and 1 or 0),
     col = Config.ui.stack_col_offset,
   }
-
-  -- Store calculated dimensions for potential fallback and stack item
-  self.calculated_width = win_config.width
-  self.calculated_height = win_config.height
-  self.calculated_row = win_config.row
-  self.calculated_col = win_config.row
-  self.orginal_win_id = nil -- Not applicable for stacked popups
 
   return win_config
 end
@@ -213,68 +185,6 @@ function Popup:configure_opened_window_details()
   end)
 end
 
---- Acquires final geometry from Neovim API and validates it, falling back to calculated values if necessary.
----@return boolean success True if geometry was acquired and is valid, false otherwise.
-function Popup:acquire_final_geometry_and_validate()
-  ---@type vim.api.keyset.win_config?
-  local final_geom = api.nvim_win_get_config(self.win_id)
-
-  -- If nvim_win_get_config itself fails and returns nil, treat as critical failure.
-  if final_geom == nil then
-    -- vim.notify("Overlook: nvim_win_get_config failed for win_id: " .. tostring(self.win_id), vim.log.levels.WARN)
-    self.geometry_source = "api_failed"
-    return false
-  end
-
-  if final_geom.width and final_geom.height and final_geom.row and final_geom.col then
-    self.final_width = final_geom.width
-    self.final_height = final_geom.height
-    self.final_row = math.floor(final_geom.row)
-    self.final_col = math.floor(final_geom.col)
-    self.geometry_source = "api"
-  elseif
-    self.calculated_width ~= nil
-    and self.calculated_height ~= nil
-    and self.calculated_row ~= nil
-    and self.calculated_col ~= nil
-  then
-    self.final_width = self.calculated_width
-    self.final_height = self.calculated_height
-    self.final_row = self.calculated_row
-    self.final_col = self.calculated_col
-    self.geometry_source = "calculated_fallback"
-  else
-    -- vim.notify("Overlook: Failed to obtain valid geometry for popup.", vim.log.levels.ERROR)
-    self.geometry_source = "none"
-    return false -- Critical failure if no geometry can be determined
-  end
-  return true
-end
-
---- Cleans up the window if it was opened, e.g., on subsequent error.
----@param force boolean Whether to force close the window (nvim_win_close force option)
-function Popup:cleanup_opened_window(force)
-  if self.win_id and api.nvim_win_is_valid(self.win_id) then
-    api.nvim_win_close(self.win_id, force)
-    self.win_id = nil -- Mark as closed
-  end
-end
-
---- Registers the newly created popup with the stack manager.
-function Popup:register_with_stack_manager()
-  local stack_item = {
-    win_id = self.win_id,
-    buf_id = self.opts.target_bufnr,
-    z_index = self.win_config.zindex,
-    width = self.final_width,
-    height = self.final_height,
-    row = self.final_row,
-    col = self.final_col,
-    original_win_id = self.orginal_win_id,
-  }
-  Stack.push(stack_item)
-end
-
 --- Creates the WinClosed autocommand for this popup instance.
 function Popup:create_close_autocommand()
   local win_id_for_closure = self.win_id -- Capture for the closure
@@ -283,9 +193,9 @@ function Popup:create_close_autocommand()
     pattern = tostring(self.win_id),
     once = true,
     callback = function(args)
-      ---@diagnostic disable-next-line: undefined-field
-      if tonumber(args.match) == win_id_for_closure then
-        Stack.handle_win_close(win_id_for_closure)
+      local closed_win_id = tonumber(args.match)
+      if closed_win_id and closed_win_id == win_id_for_closure then
+        Stack.handle_win_close(closed_win_id)
       end
     end,
   })
