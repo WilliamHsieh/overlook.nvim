@@ -50,6 +50,15 @@ end
 ---@param opts table { target_bufnr: integer, lnum: integer, col: integer, title?: string }
 ---@return boolean
 function Popup:initialize_state(opts)
+  if not opts then
+    vim.notify("Overlook: Invalid opts provided to Popup", vim.log.levels.ERROR)
+    return false
+  end
+  if not opts.target_bufnr then
+    vim.notify("Overlook: target_bufnr missing in opts for Popup", vim.log.levels.ERROR)
+    return false
+  end
+
   self.opts = opts
 
   if not api.nvim_buf_is_valid(opts.target_bufnr) then
@@ -143,13 +152,23 @@ function Popup:determine_window_configuration()
     self.is_first_popup = false
     local prev = Stack.top()
     if not prev then
+      vim.notify("Overlook: Failed to get previous popup from stack for stacked configuration.", vim.log.levels.ERROR)
       return false
     end
     win_cfg = self:config_for_stacked_popup(prev)
   end
 
+  local border
+  if Config.ui.border and Config.ui.border ~= "" then
+    border = Config.ui.border
+  elseif vim.o.winborder and vim.o.winborder ~= "" then
+    border = vim.o.winborder
+  else
+    border = "rounded"
+  end
+
   ---@diagnostic disable-next-line: assign-type-mismatch
-  win_cfg.border = Config.ui.border or vim.o.winborder or "rounded"
+  win_cfg.border = border
   win_cfg.title = self.opts.title or "Overlook default title"
   win_cfg.title_pos = "center"
 
