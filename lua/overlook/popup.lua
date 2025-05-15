@@ -9,7 +9,7 @@ local augroup_id = api.nvim_create_augroup("OverlookPopupClose", { clear = true 
 
 ---@class OverlookPopup
 ---@field opts OverlookPopupOptions
----@field win_id? integer Neovim window ID for the popup
+---@field win_id integer Neovim window ID for the popup
 ---@field pre_open_win_id? integer Neovim window ID of the window that was current before opening the popup
 ---@field win_config vim.api.keyset.win_config window configuration table for `nvim_open_win()`
 ---@field actual_win_config? vim.api.keyset.win_config window configuration table after `nvim_win_get_config()`
@@ -116,7 +116,7 @@ end
 ---@param prev OverlookStackItem Previous popup item from the stack
 ---@return table win_config Neovim window configuration table, or nil if an error occurs
 function Popup:config_for_stacked_popup(prev)
-  local win_config = {
+  return {
     relative = "win",
     style = "minimal",
     focusable = true,
@@ -129,8 +129,6 @@ function Popup:config_for_stacked_popup(prev)
     row = Config.ui.stack_row_offset - (vim.o.winbar ~= "" and 1 or 0),
     col = Config.ui.stack_col_offset,
   }
-
-  return win_config
 end
 
 --- Determines and sets the complete window configuration (size, position, border, title).
@@ -162,13 +160,9 @@ end
 --- Opens the Neovim window and registers it with the state manager.
 ---@return boolean success True if window was opened and registered, false otherwise.
 function Popup:open_and_register_window()
-  self.pre_open_win_id = api.nvim_get_current_win()
   self.win_id = api.nvim_open_win(self.opts.target_bufnr, true, self.win_config)
 
-  if not self.win_id or self.win_id == 0 then
-    if api.nvim_win_is_valid(self.pre_open_win_id) then
-      api.nvim_set_current_win(self.pre_open_win_id) -- Restore focus
-    end
+  if self.win_id == 0 then
     vim.notify("Overlook: Failed to open popup window.", vim.log.levels.ERROR)
     return false
   end
