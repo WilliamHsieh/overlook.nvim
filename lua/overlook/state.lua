@@ -179,8 +179,6 @@ function M.register_overlook_popup(winid, bufnr)
     return
   end
   M.touched_by_overlook[bufnr] = true
-  -- Set a window variable to identify Overlook popups
-  pcall(api.nvim_win_set_var, winid, "is_overlook_popup", true)
 end
 
 --- Cleans up tracking for a buffer when it's deleted.

@@ -14,15 +14,17 @@ local augroup_id = api.nvim_create_augroup("OverlookPopupClose", { clear = true 
 ---@field win_config vim.api.keyset.win_config window configuration table for `nvim_open_win()`
 ---@field actual_win_config? vim.api.keyset.win_config window configuration table after `nvim_win_get_config()`
 ---@field is_first_popup boolean
----@field orginal_win_id? integer
+---@field orginal_win_id integer
 local Popup = {}
 Popup.__index = Popup
+
+local M = {}
 
 --- Constructor for a new Popup instance.
 --- Orchestrates the creation, configuration, and registration of a popup window.
 ---@param opts OverlookPopupOptions
 ---@return OverlookPopup?
-function Popup.new(opts)
+function M.new(opts)
   ---@type OverlookPopup
   local this = setmetatable({}, Popup)
 
@@ -125,6 +127,7 @@ end
 ---@param prev OverlookStackItem Previous popup item from the stack
 ---@return table win_config Neovim window configuration table, or nil if an error occurs
 function Popup:config_for_stacked_popup(prev)
+  self.orginal_win_id = prev.original_win_id
   return {
     relative = "win",
     style = "minimal",
@@ -186,6 +189,11 @@ function Popup:open_and_register_window()
     return false
   end
 
+  vim.w.is_overlook_popup = true
+  vim.w.overlook_popup = {
+    original_win_id = self.orginal_win_id,
+  }
+
   State.register_overlook_popup(self.win_id, self.opts.target_bufnr)
   return true
 end
@@ -214,4 +222,4 @@ function Popup:create_close_autocommand()
   })
 end
 
-return Popup
+return M
