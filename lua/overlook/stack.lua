@@ -117,47 +117,16 @@ end
 --- Closes all overlook popups gracefully using eventignore.
 ---@param force_close? boolean If true, uses force flag when closing windows.
 function Stack:clear(force_close)
-  -- Ignore WinClosed while we manually close everything
-  vim.opt.eventignore:append("WinClosed")
-
   -- Iterate over the copy, closing windows
-  for i = #self.items, 1, -1 do
-    local popup_info = self.items[i]
-    if popup_info then
-      pcall(api.nvim_win_close, popup_info.win_id, force_close or false)
-    end
-  end
-
-  -- Re-enable WinClosed
-  vim.opt.eventignore:remove("WinClosed")
-
-  -- Clear the stack state AFTER closing windows and restoring focus
-  self.items = {}
-
-  -- Explicitly restore focus to the original window *after* all popups are closed.
-  if self.original_win_id and api.nvim_win_is_valid(self.original_win_id) then
-    pcall(api.nvim_set_current_win, self.original_win_id)
-  else
-    -- Do not fallback if original_win_to_restore was nil initially.
-    if self.original_win_id then
-      local wins = api.nvim_list_wins()
-      if wins and #wins > 0 then
-        local target_win = wins[1]
-        if api.nvim_win_is_valid(target_win) then
-          pcall(api.nvim_set_current_win, target_win)
-        end
-      end
+  while not self:empty() do
+    local top = self:top()
+    if top and api.nvim_win_is_valid(top.win_id) then
+      api.nvim_win_close(top.win_id, force_close or false)
     end
   end
 
   -- Clean up the autocommand group to prevent leaks
   pcall(api.nvim_clear_autocmds, { group = self.augroup_id })
-
-  -- Explicitly update the keymap state after closing all windows and restoring focus
-  -- Use vim.schedule to ensure this runs after Neovim has processed the focus change
-  vim.schedule(function()
-    require("overlook.state").update_keymap()
-  end)
 end
 
 -- Module-level state and functions
