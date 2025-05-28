@@ -95,11 +95,13 @@ M.stack_instances = {} -- Key: original_win_id, Value: Stack object
 ---@param original_win_id integer
 ---@return OverlookStack
 function M.new(original_win_id)
-  return setmetatable({
-    original_win_id = original_win_id,
-    augroup_id = api.nvim_create_augroup("OverlookPopupClose", { clear = true }),
-    items = {},
-  }, Stack)
+  local this = setmetatable({}, Stack)
+
+  this.original_win_id = original_win_id
+  this.augroup_id = api.nvim_create_augroup("OverlookPopupClose", { clear = true })
+  this.items = {}
+
+  return this
 end
 
 ---Handles cleanup and focus when an overlook popup WINDOW is closed.
