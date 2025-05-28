@@ -1,3 +1,5 @@
+---@diagnostic disable: undefined-field
+
 local mock = require("luassert.mock")
 local stack = require("overlook.stack")
 local stub = require("luassert.stub")
@@ -35,7 +37,7 @@ describe("overlook.stack", function()
   local api_mock
   local original_config
   local original_state
-  local original_schedule
+  local schedule_stub
 
   before_each(function()
     -- Reset stack instances
@@ -69,11 +71,11 @@ describe("overlook.stack", function()
       update_keymap = stub(),
     }
 
-    -- Store original vim.schedule and mock it
-    original_schedule = vim.schedule
-    vim.schedule = function(fn)
-      fn()
-    end
+    -- Properly stub vim.schedule using luassert
+    schedule_stub = stub(vim, "schedule")
+    schedule_stub.invokes(function(fn)
+      fn() -- Execute immediately for testing
+    end)
 
     -- Reset vim.w for each test
     vim.w = {}
@@ -86,8 +88,8 @@ describe("overlook.stack", function()
     package.loaded["overlook.config"] = original_config
     package.loaded["overlook.state"] = original_state
 
-    -- Restore original vim.schedule
-    vim.schedule = original_schedule
+    -- Properly revert the vim.schedule stub
+    schedule_stub:revert()
   end)
 
   describe("Stack instance management", function()
