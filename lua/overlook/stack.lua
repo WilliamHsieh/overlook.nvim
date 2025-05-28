@@ -1,7 +1,5 @@
 local api = vim.api
 
-local M = {}
-
 ---@class OverlookStackItem
 ---@field win_id integer Window ID of the popup
 ---@field buf_id integer Buffer ID of the *target* buffer shown in the popup
@@ -18,17 +16,6 @@ local M = {}
 ---@field items OverlookStackItem[] Array of popup items.
 local Stack = {}
 Stack.__index = Stack
-
----Creates a new Stack instance.
----@param original_win_id integer
----@return OverlookStack
-function M.new(original_win_id)
-  return setmetatable({
-    original_win_id = original_win_id,
-    augroup_id = api.nvim_create_augroup("OverlookPopupClose", { clear = true }),
-    items = {},
-  }, Stack)
-end
 
 ---Returns the current size of the stack.
 ---@return integer
@@ -57,6 +44,22 @@ function Stack:push(popup_info)
   table.insert(self.items, popup_info)
 end
 
+-- clear() - Modified to use eventignore
+--- Closes all overlook popups gracefully using eventignore.
+---@param force_close? boolean If true, uses force flag when closing windows.
+function Stack:clear(force_close)
+  -- Iterate over the copy, closing windows
+  while not self:empty() do
+    local top = self:top()
+    if top and api.nvim_win_is_valid(top.win_id) then
+      api.nvim_win_close(top.win_id, force_close or false)
+    end
+  end
+
+  -- Clean up the autocommand group to prevent leaks
+  pcall(api.nvim_clear_autocmds, { group = self.augroup_id })
+end
+
 ---Remove a popup's info and index in the stack by window ID.
 ---@param win_id integer
 function Stack:remove_by_winid(win_id)
@@ -79,6 +82,24 @@ function Stack:remove_invalid_windows()
     -- Remove the invalid top window
     table.remove(self.items, self:size())
   end
+end
+
+-- Module-level state and functions
+-----------------------------------
+local M = {}
+
+---@type table<integer, OverlookStack>
+M.stack_instances = {} -- Key: original_win_id, Value: Stack object
+
+---Creates a new Stack instance.
+---@param original_win_id integer
+---@return OverlookStack
+function M.new(original_win_id)
+  return setmetatable({
+    original_win_id = original_win_id,
+    augroup_id = api.nvim_create_augroup("OverlookPopupClose", { clear = true }),
+    items = {},
+  }, Stack)
 end
 
 ---Handles cleanup and focus when an overlook popup WINDOW is closed.
@@ -112,28 +133,6 @@ function M.handle_win_close(closed_win_id)
     require("overlook.state").update_keymap()
   end)
 end
-
--- clear() - Modified to use eventignore
---- Closes all overlook popups gracefully using eventignore.
----@param force_close? boolean If true, uses force flag when closing windows.
-function Stack:clear(force_close)
-  -- Iterate over the copy, closing windows
-  while not self:empty() do
-    local top = self:top()
-    if top and api.nvim_win_is_valid(top.win_id) then
-      api.nvim_win_close(top.win_id, force_close or false)
-    end
-  end
-
-  -- Clean up the autocommand group to prevent leaks
-  pcall(api.nvim_clear_autocmds, { group = self.augroup_id })
-end
-
--- Module-level state and functions
------------------------------------
-
----@type table<integer, OverlookStack>
-M.stack_instances = {} -- Key: original_win_id, Value: Stack object
 
 ---Determines the original_win_id for the current context.
 ---@return integer
