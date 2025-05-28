@@ -4,8 +4,7 @@ local M = {}
 ---@param opts OverlookPopupOptions
 ---@return { win_id: integer, buf_id: integer } | nil
 function M.create_popup(opts)
-  local Popup = require("overlook.popup")
-  local popup = Popup.new(opts)
+  local popup = require("overlook.popup").new(opts)
   if not popup then
     return nil
   end

@@ -57,64 +57,43 @@ function Stack:push(popup_info)
   table.insert(self.items, popup_info)
 end
 
----Finds a popup's info and index in the stack by buffer ID.
+---Remove a popup's info and index in the stack by window ID.
 ---@param win_id integer
----@return OverlookStack, integer | nil @ Returns item info and its 1-based index.
-function M.find_by_win(win_id) -- Renamed from find_by_buf
-  local stack = M.get_current_stack()
-  for i = stack:size(), 1, -1 do
-    if stack.items[i].win_id == win_id then
-      return stack, i
+function Stack:remove_by_winid(win_id)
+  for i = self:size(), 1, -1 do
+    if self.items[i].win_id == win_id then
+      table.remove(self.items, i)
+      return
     end
   end
+end
 
-  return stack, nil
+---Remove invalid windows from the stack until top window is valid.
+function Stack:remove_invalid_windows()
+  while not self:empty() do
+    local top = self:top()
+    if top and api.nvim_win_is_valid(top.win_id) then
+      return
+    end
+
+    -- Remove the invalid top window
+    table.remove(self.items, self:size())
+  end
 end
 
 ---Handles cleanup and focus when an overlook popup WINDOW is closed.
 --- Triggered by WinClosed autocommand (via ui.lua).
 ---@param closed_win_id integer
 function M.handle_win_close(closed_win_id)
-  local stack, index = M.find_by_win(closed_win_id)
-  if not index then
-    -- No stack or window not found in the stack, nothing to do.
-    return
-  end
-
-  -- Window was found in the stack. Remove it.
-  table.remove(stack.items, index)
+  local stack = M.get_current_stack()
+  stack:remove_by_winid(closed_win_id)
+  stack:remove_invalid_windows()
 
   -- Determine the window to focus next
-  if M.size() > 0 then
-    -- Focus the *new* top of the stack (which was the one below the closed one)
-    local next_top_popup = M.top() -- M.top() now returns the correct window
-    if next_top_popup and api.nvim_win_is_valid(next_top_popup.win_id) then
-      pcall(api.nvim_set_current_win, next_top_popup.win_id)
-    else
-      -- This case might mean the window below was also closed unexpectedly or is invalid.
-      -- Fallback to original window if possible, otherwise call close_all as a safety measure.
-      if M.original_win_id and api.nvim_win_is_valid(M.original_win_id) then
-        pcall(api.nvim_set_current_win, M.original_win_id)
-        M.original_win_id = nil -- Clear original ID since stack should be empty now
-      else
-        -- If original is gone too, close everything remaining as a safety measure
-        M.clear(true)
-        M.original_win_id = nil -- Ensure it's cleared
-      end
-    end
+  if not stack:empty() then
+    pcall(api.nvim_set_current_win, stack:top().win_id)
   else
-    -- Stack is now empty, focus the original window
-    if M.original_win_id and api.nvim_win_is_valid(M.original_win_id) then
-      pcall(api.nvim_set_current_win, M.original_win_id)
-    else
-      -- Fallback: focus any valid window (Neovim might do this anyway)
-      local wins = api.nvim_list_wins()
-      if wins and #wins > 0 and api.nvim_win_is_valid(wins[1]) then
-        pcall(api.nvim_set_current_win, wins[1])
-      end
-    end
-    -- Clear the original window ID only when the stack is empty *and* we've attempted focus restoration
-    M.original_win_id = nil
+    pcall(api.nvim_set_current_win, stack.original_win_id)
 
     -- Call the on_stack_empty hook if defined
     local config_mod = require("overlook.config")
@@ -138,14 +117,12 @@ end
 --- Closes all overlook popups gracefully using eventignore.
 ---@param force_close? boolean If true, uses force flag when closing windows.
 function Stack:clear(force_close)
-  local stack_copy = vim.deepcopy(self.items)
-
   -- Ignore WinClosed while we manually close everything
   vim.opt.eventignore:append("WinClosed")
 
   -- Iterate over the copy, closing windows
-  for i = #stack_copy, 1, -1 do
-    local popup_info = stack_copy[i]
+  for i = #self.items, 1, -1 do
+    local popup_info = self.items[i]
     if popup_info then
       pcall(api.nvim_win_close, popup_info.win_id, force_close or false)
     end
@@ -192,11 +169,10 @@ M.stack_instances = {} -- Key: original_win_id, Value: Stack object
 ---Determines the original_win_id for the current context.
 ---@return integer
 function M.get_current_original_win_id()
-  local current_win = api.nvim_get_current_win()
   if vim.w.is_overlook_popup then
     return vim.w.overlook_popup.original_win_id
   end
-  return current_win
+  return api.nvim_get_current_win()
 end
 
 -- assuming this is original window, not popup
