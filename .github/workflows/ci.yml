@@ -1,6 +1,11 @@
 name: Tests
 
-on: [push, pull_request]
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches:
+      - master
 
 jobs:
   unit_tests:
@@ -9,8 +14,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-22.04, macos-latest]
-        rev: [nightly, v0.11.0]
+        os: [ubuntu-latest, macos-latest]
+        rev: [nightly, v0.11.1]
 
     steps:
       - uses: actions/checkout@v4
