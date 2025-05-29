@@ -1,6 +1,6 @@
 describe("Cursor Adapter", function()
   local peek_mod = require("overlook.peek")
-  local ui_mod = require("overlook.ui")
+  local ui_mod = require("overlook.window")
 
   local original_create_popup
   local original_notify

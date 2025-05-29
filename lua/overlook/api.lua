@@ -29,7 +29,7 @@ M.peek.mark = function()
 end
 
 M.close_all = function()
-  Stack.clear()
+  require("overlook.window").close_all()
 end
 
 --- Promotes the top Overlook popup to a regular window (split, vsplit, or tab).
