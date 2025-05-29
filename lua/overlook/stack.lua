@@ -44,17 +44,35 @@ function Stack:push(popup_info)
   table.insert(self.items, popup_info)
 end
 
+---Pushes popup info onto the stack and stores original wid if needed.
+function Stack:pop()
+  if not self:empty() then
+    table.remove(self.items, self:size())
+  end
+end
+
 -- clear() - Modified to use eventignore
 --- Closes all overlook popups gracefully using eventignore.
 ---@param force_close? boolean If true, uses force flag when closing windows.
 function Stack:clear(force_close)
+  -- Ignore WinClosed while we manually close everything
+  -- this is required to avoid window focus jumping during the process
+  vim.opt.eventignore:append("WinClosed")
+
   -- Iterate over the copy, closing windows
   while not self:empty() do
     local top = self:top()
     if top and api.nvim_win_is_valid(top.win_id) then
       api.nvim_win_close(top.win_id, force_close or false)
     end
+    self:pop()
   end
+
+  -- Re-enable WinClosed
+  vim.opt.eventignore:remove("WinClosed")
+
+  -- Restore focus to the original window
+  pcall(api.nvim_set_current_win, self.original_win_id)
 
   -- Clean up the autocommand group to prevent leaks
   pcall(api.nvim_clear_autocmds, { group = self.augroup_id })
@@ -80,7 +98,7 @@ function Stack:remove_invalid_windows()
     end
 
     -- Remove the invalid top window
-    table.remove(self.items, self:size())
+    self:pop()
   end
 end
 
