@@ -51,31 +51,8 @@ function Stack:pop()
   end
 end
 
--- clear() - Modified to use eventignore
---- Closes all overlook popups gracefully using eventignore.
----@param force_close? boolean If true, uses force flag when closing windows.
-function Stack:clear(force_close)
-  -- Ignore WinClosed while we manually close everything
-  -- this is required to avoid window focus jumping during the process
-  vim.opt.eventignore:append("WinClosed")
-
-  -- Iterate over the copy, closing windows
-  while not self:empty() do
-    local top = self:top()
-    if top and api.nvim_win_is_valid(top.win_id) then
-      api.nvim_win_close(top.win_id, force_close or false)
-    end
-    self:pop()
-  end
-
-  -- Re-enable WinClosed
-  vim.opt.eventignore:remove("WinClosed")
-
-  -- Restore focus to the original window
-  pcall(api.nvim_set_current_win, self.original_win_id)
-
-  -- Clean up the autocommand group to prevent leaks
-  pcall(api.nvim_clear_autocmds, { group = self.augroup_id })
+function Stack:clear()
+  self.items = {}
 end
 
 ---Remove a popup's info and index in the stack by window ID.
@@ -166,10 +143,9 @@ function M.empty()
   return stack:empty()
 end
 
----@param force_close? boolean If true, uses force flag when closing windows.
-function M.clear(force_close)
+function M.clear()
   local stack = M.get_current_stack()
-  return stack:clear(force_close)
+  return stack:clear()
 end
 
 return M
