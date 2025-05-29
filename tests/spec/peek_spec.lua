@@ -35,7 +35,7 @@ describe("overlook.peek", function()
 
     -- Inject mocks using package.loaded trick
     package.loaded["overlook.adapter.marks"] = mock_marks_adapter
-    package.loaded["overlook.ui"] = mock_ui
+    package.loaded["overlook.window"] = mock_ui
 
     -- Reload the peek module to use the mocks
     package.loaded["overlook.peek"] = nil
@@ -46,7 +46,7 @@ describe("overlook.peek", function()
     -- Restore originals
     vim.notify = original_notify
     package.loaded["overlook.adapter.marks"] = nil
-    package.loaded["overlook.ui"] = nil
+    package.loaded["overlook.window"] = nil
     package.loaded["overlook.peek"] = nil
   end)
 

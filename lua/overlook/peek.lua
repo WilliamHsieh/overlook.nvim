@@ -24,7 +24,7 @@ local function peek_with_adapters(adapter_type, ...)
     return
   end
 
-  require("overlook.ui").create_popup(opts)
+  require("overlook.window").create_popup(opts)
 end
 
 setmetatable(M, {
