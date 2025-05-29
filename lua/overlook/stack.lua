@@ -122,38 +122,6 @@ function M.new(original_win_id)
   return this
 end
 
----Handles cleanup and focus when an overlook popup WINDOW is closed.
---- Triggered by WinClosed autocommand (via ui.lua).
----@param closed_win_id integer
-function M.handle_win_close(closed_win_id)
-  local stack = M.get_current_stack()
-  stack:remove_by_winid(closed_win_id)
-  stack:remove_invalid_windows()
-
-  -- Determine the window to focus next
-  if not stack:empty() then
-    pcall(api.nvim_set_current_win, stack:top().win_id)
-  else
-    pcall(api.nvim_set_current_win, stack.original_win_id)
-
-    -- Call the on_stack_empty hook if defined
-    local config_mod = require("overlook.config")
-    if config_mod and config_mod.options and type(config_mod.options.on_stack_empty) == "function" then
-      -- Use pcall to prevent user errors in hook from breaking the plugin
-      local ok, err = pcall(config_mod.options.on_stack_empty)
-      if not ok then
-        vim.notify("Overlook Error: on_stack_empty callback failed: " .. tostring(err), vim.log.levels.ERROR)
-      end
-    end
-  end
-
-  -- Explicitly update the keymap state after handling window close and focus change
-  -- Use vim.schedule to ensure this runs after Neovim has processed the focus change
-  vim.schedule(function()
-    require("overlook.state").update_keymap()
-  end)
-end
-
 ---Determines the original_win_id for the current context.
 ---@return integer
 function M.get_current_original_win_id()

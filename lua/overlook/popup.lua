@@ -20,34 +20,6 @@ Popup.__index = Popup
 
 local M = {}
 
---- Constructor for a new Popup instance.
---- Orchestrates the creation, configuration, and registration of a popup window.
----@param opts OverlookPopupOptions
----@return OverlookPopup?
-function M.new(opts)
-  ---@type OverlookPopup
-  local this = setmetatable({}, Popup)
-
-  if not this:initialize_state(opts) then
-    return nil
-  end
-
-  if not this:determine_window_configuration() then
-    return nil
-  end
-
-  if not this:open_and_register_window() then
-    return nil
-  end
-
-  this:configure_opened_window_details()
-  this:create_close_autocommand()
-
-  this.actual_win_config = api.nvim_win_get_config(this.win_id)
-
-  return this
-end
-
 --- Initializes instance variables and performs basic validation.
 ---@param opts table { target_bufnr: integer, lnum: integer, col: integer, title?: string }
 ---@return boolean
@@ -216,10 +188,72 @@ function Popup:create_close_autocommand()
     callback = function(args)
       local closed_win_id = tonumber(args.match)
       if closed_win_id and closed_win_id == win_id_for_closure then
-        Stack.handle_win_close(closed_win_id)
+        M.on_close(closed_win_id)
       end
     end,
   })
+end
+
+-- Module-level state and functions
+-----------------------------------
+
+--- Constructor for a new Popup instance.
+--- Orchestrates the creation, configuration, and registration of a popup window.
+---@param opts OverlookPopupOptions
+---@return OverlookPopup?
+function M.new(opts)
+  ---@type OverlookPopup
+  local this = setmetatable({}, Popup)
+
+  if not this:initialize_state(opts) then
+    return nil
+  end
+
+  if not this:determine_window_configuration() then
+    return nil
+  end
+
+  if not this:open_and_register_window() then
+    return nil
+  end
+
+  this:configure_opened_window_details()
+  this:create_close_autocommand()
+
+  this.actual_win_config = api.nvim_win_get_config(this.win_id)
+
+  return this
+end
+
+---Handles cleanup and focus when an overlook popup window is closed.
+---Triggered by WinClosed autocommand
+---@param popup_winid integer
+function M.on_close(popup_winid)
+  local stack = Stack.get_current_stack()
+  stack:remove_by_winid(popup_winid)
+  stack:remove_invalid_windows()
+
+  -- Determine the window to focus next
+  if not stack:empty() then
+    pcall(api.nvim_set_current_win, stack:top().win_id)
+  else
+    pcall(api.nvim_set_current_win, stack.original_win_id)
+
+    -- Call the on_stack_empty hook if defined
+    if type(Config.on_stack_empty) == "function" then
+      -- Use pcall to prevent user errors in hook from breaking the plugin
+      local ok, err = pcall(Config.on_stack_empty)
+      if not ok then
+        vim.notify("Overlook Error: on_stack_empty callback failed: " .. tostring(err), vim.log.levels.ERROR)
+      end
+    end
+  end
+
+  -- Explicitly update the keymap state after handling window close and focus change
+  -- Use vim.schedule to ensure this runs after Neovim has processed the focus change
+  vim.schedule(function()
+    require("overlook.state").update_keymap()
+  end)
 end
 
 return M
