@@ -1,19 +1,9 @@
 local api = vim.api
 
----@class OverlookStackItem
----@field win_id integer Window ID of the popup
----@field buf_id integer Buffer ID of the *target* buffer shown in the popup
----@field z_index integer Z-index of the window
----@field width integer
----@field height integer
----@field row integer     -- Absolute screen row (1-based)
----@field col integer     -- Absolute screen col (1-based)
----@field original_win_id integer? -- Original window ID (if applicable)
-
 ---@class OverlookStack
 ---@field original_win_id integer The root original window ID for this stack.
 ---@field augroup_id integer The ID of the autocommand group for closing popups.
----@field items OverlookStackItem[] Array of popup items.
+---@field items OverlookPopup[] Array of popup items.
 local Stack = {}
 Stack.__index = Stack
 
@@ -30,7 +20,7 @@ function Stack:empty()
 end
 
 ---Returns the info for the top popup without removing it.
----@return OverlookStackItem | nil
+---@return OverlookPopup | nil
 function Stack:top()
   if self:empty() then
     return nil
@@ -39,7 +29,7 @@ function Stack:top()
 end
 
 ---Pushes popup info onto the stack and stores original wid if needed.
----@param popup_info OverlookStackItem
+---@param popup_info OverlookPopup
 function Stack:push(popup_info)
   table.insert(self.items, popup_info)
 end
@@ -179,7 +169,7 @@ function M.get_current_stack()
   return M.win_get_stack(win_id)
 end
 
----@param popup_info OverlookStackItem
+---@param popup_info OverlookPopup
 function M.push(popup_info)
   local stack = M.get_current_stack()
   return stack:push(popup_info)

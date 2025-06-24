@@ -10,16 +10,7 @@ function M.create_popup(opts)
   end
 
   local stack = require("overlook.stack").win_get_stack(popup.orginal_win_id)
-  stack:push {
-    win_id = popup.win_id,
-    buf_id = popup.opts.target_bufnr,
-    z_index = popup.actual_win_config.zindex,
-    width = popup.actual_win_config.width,
-    height = popup.actual_win_config.height,
-    row = popup.actual_win_config.row,
-    col = popup.actual_win_config.col,
-    original_win_id = popup.orginal_win_id,
-  }
+  stack:push(popup)
 
   return { win_id = popup.win_id, buf_id = popup.opts.target_bufnr }
 end

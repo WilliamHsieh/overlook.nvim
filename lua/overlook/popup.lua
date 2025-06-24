@@ -6,9 +6,9 @@ local State = require("overlook.state")
 ---@class OverlookPopup
 ---@field opts OverlookPopupOptions
 ---@field win_id integer Neovim window ID for the popup
----@field pre_open_win_id? integer Neovim window ID of the window that was current before opening the popup
 ---@field win_config vim.api.keyset.win_config window configuration table for `nvim_open_win()`
----@field actual_win_config? vim.api.keyset.win_config window configuration table after `nvim_win_get_config()`
+---@field width integer Width of the popup window
+---@field height integer Height of the popup window
 ---@field is_first_popup boolean
 ---@field orginal_win_id integer
 local Popup = {}
@@ -37,8 +37,6 @@ function M.new(opts)
   end
 
   this:configure_opened_window_details()
-
-  this.actual_win_config = api.nvim_win_get_config(this.win_id)
 
   return this
 end
@@ -119,10 +117,10 @@ function Popup:config_for_first_popup()
 end
 
 --- Calculates the window configuration for subsequent (stacked) popups.
----@param prev OverlookStackItem Previous popup item from the stack
+---@param prev OverlookPopup Previous popup item from the stack
 ---@return table win_config Neovim window configuration table, or nil if an error occurs
 function Popup:config_for_stacked_popup(prev)
-  self.orginal_win_id = prev.original_win_id
+  self.orginal_win_id = prev.orginal_win_id
   return {
     relative = "win",
     style = "minimal",
@@ -190,6 +188,11 @@ function Popup:open_and_register_window()
   }
 
   State.register_overlook_popup(self.win_id, self.opts.target_bufnr)
+
+  local actual_win_config = vim.api.nvim_win_get_config(self.win_id)
+  self.width = actual_win_config.width
+  self.height = actual_win_config.height
+
   return true
 end
 
