@@ -40,6 +40,22 @@ M.peek_definition = function()
   Peek.definition()
 end
 
+--- Focus on the topmost popup in the current window's stack.
+---
+--- Shifts window focus to the topmost popup in the current window's popup stack.
+--- This is useful when you need to interact with popup content after focusing
+--- elsewhere in the window.
+---
+---@usage >lua
+---   vim.keymap.set("n", "<leader>pf", require("overlook.api").focus)
+--- <
+---@tag overlook-api.focus
+---@toc_entry
+M.focus = function()
+  local stack = require("overlook.stack").get_current_stack()
+  stack:focus()
+end
+
 --- Peek at the current cursor position.
 ---
 --- Creates a floating popup window at the current cursor position, displaying
