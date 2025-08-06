@@ -8,15 +8,6 @@ local api = vim.api
 local Stack = {}
 Stack.__index = Stack
 
----Focus the top popup in the stack.
----@return boolean
-function Stack:focus()
-    if self:empty() then
-        return false
-    end
-    return pcall(api.nvim_set_current_win, self:top().winid)
-end
-
 ---Returns the current size of the stack.
 ---@return integer
 function Stack:size()
