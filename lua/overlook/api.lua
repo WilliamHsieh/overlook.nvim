@@ -51,9 +51,20 @@ end
 --- <
 ---@tag overlook-api.focus
 ---@toc_entry
-M.focus = function()
-  local stack = require("overlook.stack").get_current_stack()
-  stack:focus()
+M.switch_focus = function()
+  if not Stack.exists() or Stack.empty() then
+      vim.notify("Overlook: no popup to focus")
+    return
+  end
+  
+  local switch_to_winid = nil
+  if vim.w.is_overlook_popup then
+    switch_to_winid = vim.w.overlook_popup.root_winid
+  else then
+    switch_to_winid = Stack.top().winid
+  end
+  
+  pcall(api.nvim_set_current_win, switch_to_winid)
 end
 
 --- Peek at the current cursor position.
