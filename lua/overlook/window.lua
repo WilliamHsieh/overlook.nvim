@@ -55,8 +55,16 @@ end
 ---@return OverlookPopup?
 function Window:open_popup(opts)
   local Popup = require("overlook.popup")
-  local popup = Popup.new(opts)
+  local ctx = {
+    root_winid = self.winid,
+    prev = self.stack:top(),
+    depth = self.stack:size(),
+  }
+  local popup = Popup.new(opts, ctx)
   if not popup then
+    return nil
+  end
+  if not popup:open() then
     return nil
   end
   self.stack:push(popup)
@@ -111,9 +119,7 @@ function Window:close_all(force)
 
   while not self.stack:empty() do
     local top = self.stack:top()
-    if top and api.nvim_win_is_valid(top.winid) then
-      api.nvim_win_close(top.winid, force or false)
-    end
+    if top then top:close(force) end
     self.stack:pop()
   end
 
@@ -126,9 +132,7 @@ end
 function Window:prune_invalid()
   while not self.stack:empty() do
     local top = self.stack:top()
-    if top and api.nvim_win_is_valid(top.winid) then
-      return
-    end
+    if top and top:is_valid() then return end
     self.stack:pop()
   end
 end
@@ -141,8 +145,8 @@ function Window:on_popup_closed(winid)
   self:prune_invalid()
 
   local top = self.stack:top()
-  if top and api.nvim_win_is_valid(top.winid) then
-    pcall(api.nvim_set_current_win, top.winid)
+  if top and top:is_valid() then
+    top:focus()
   else
     pcall(api.nvim_set_current_win, self.winid)
 
@@ -170,8 +174,13 @@ function Window:restore()
   local Popup = require("overlook.popup")
   ---@type OverlookPopup
   local closed = self.stack.trash[#self.stack.trash]
-  local restored = Popup.new(closed.opts)
-  if not restored then
+  local ctx = {
+    root_winid = self.winid,
+    prev = self.stack:top(),
+    depth = self.stack:size(),
+  }
+  local restored = Popup.new(closed.opts, ctx)
+  if not restored or not restored:open() then
     vim.notify("Overlook: Failed to restore popup", vim.log.levels.ERROR)
     return
   end
@@ -193,17 +202,16 @@ end
 
 ---Toggle focus between the top popup and the root window.
 function Window:switch_focus()
-  local switch_to
   if vim.w.is_overlook_popup then
-    switch_to = self.winid
-  elseif not self.stack:empty() then
-    switch_to = self.stack:top().winid
-  end
-  if not switch_to then
-    vim.notify("Overlook: no popup to focus", vim.log.levels.INFO)
+    pcall(api.nvim_set_current_win, self.winid)
     return
   end
-  pcall(api.nvim_set_current_win, switch_to)
+  local top = self.stack:top()
+  if top then
+    top:focus()
+  else
+    vim.notify("Overlook: no popup to focus", vim.log.levels.INFO)
+  end
 end
 
 ---@return OverlookPopup?

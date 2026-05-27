@@ -436,16 +436,29 @@ describe("Popup input validation", function()
   end)
 end)
 
-describe("Popup stack integration", function()
-  local api_mock
-  local notify_stub
+describe("Popup — lifecycle methods", function()
+  local api_mock, notify_stub
 
   before_each(function()
     global_mock_config_module.reset_to_initial_state()
-
-    api_mock = setup_common_mocks()
-
-    -- Stub vim.notify directly
+    api_mock = mock(vim.api, true)
+    api_mock.nvim_buf_is_valid.returns(true)
+    api_mock.nvim_open_win.returns(1234)
+    api_mock.nvim_win_is_valid.returns(true)
+    api_mock.nvim_win_close = stub()
+    api_mock.nvim_set_current_win = stub()
+    api_mock.nvim_get_current_win.returns(100)
+    api_mock.nvim_win_get_position.returns { 0, 0 }
+    api_mock.nvim_win_get_height.returns(20)
+    api_mock.nvim_win_get_width.returns(80)
+    api_mock.nvim_win_get_cursor.returns { 5, 10 }
+    api_mock.nvim_win_get_config.returns { width = 64, height = 12 }
+    api_mock.nvim_create_autocmd = stub()
+    api_mock.nvim_win_set_cursor = stub()
+    api_mock.nvim_win_call = stub()
+    vim.fn.screenpos = stub().returns { row = 6, col = 11 }
+    require("overlook.state").register_overlook_popup = stub()
+    vim.w = {}
     notify_stub = stub(vim, "notify")
   end)
 
@@ -454,72 +467,72 @@ describe("Popup stack integration", function()
     notify_stub:revert()
   end)
 
-  it("should create first popup when stack is empty", function()
-    Stack.empty = stub().returns(true)
-    Stack.size = stub().returns(0)
-
-    local popup_instance = Popup.new { target_bufnr = TEST_CONSTANTS.DEFAULT_BUF_ID, lnum = 1, col = 1 }
-
-    assert.is_not_nil(popup_instance)
-    assert.is_true(popup_instance.is_first_popup)
-    assert.are.equal("double", popup_instance.win_config.border)
-    assert.are.equal("Overlook default title", popup_instance.win_config.title)
+  it("Popup.new(opts, ctx) constructs without opening a window", function()
+    local p = Popup.new({ target_bufnr = 1, lnum = 1, col = 1 }, { root_winid = 100, prev = nil, depth = 0 })
+    assert.is_not_nil(p)
+    assert.is_nil(p.winid)
+    assert.stub(api_mock.nvim_open_win).was_not_called()
   end)
 
-  it("should create stacked popup when stack is not empty", function()
-    local mock_prev_item = {
-      winid = TEST_CONSTANTS.POPUP_WINIDS[2],
-      width = 50,
-      height = 10,
-      buf_id = 2,
-      root_winid = TEST_CONSTANTS.DEFAULT_WINID,
-    }
-
-    Stack.empty = stub().returns(false)
-    Stack.top = stub().returns(mock_prev_item)
-    Stack.size = stub().returns(1)
-
-    local popup_instance = Popup.new {
-      target_bufnr = TEST_CONSTANTS.DEFAULT_BUF_ID,
-      lnum = 1,
-      col = 1,
-      title = "Stacked Title",
-    }
-
-    assert.is_not_nil(popup_instance)
-    assert.is_false(popup_instance.is_first_popup)
-    assert.are.equal("Stacked Title", popup_instance.win_config.title)
-    assert.are.equal(mock_prev_item.winid, popup_instance.win_config.win)
+  it("popup:open opens the window and registers state", function()
+    local p = Popup.new({ target_bufnr = 1, lnum = 1, col = 1 }, { root_winid = 100, prev = nil, depth = 0 })
+    local ok = p:open()
+    assert.is_true(ok)
+    assert.are.equal(1234, p.winid)
+    assert.stub(api_mock.nvim_open_win).was_called(1)
   end)
 
-  it("should return nil if Stack.top() returns nil for stacked popup", function()
-    Stack.empty = stub().returns(false)
-    Stack.top = stub().returns(nil)
-
-    local popup_instance = Popup.new { target_bufnr = TEST_CONSTANTS.DEFAULT_BUF_ID, lnum = 1, col = 1 }
-
-    assert.is_nil(popup_instance)
-    assert.stub(notify_stub).was_called(1)
+  it("popup:open returns false when nvim_open_win returns 0", function()
+    api_mock.nvim_open_win.returns(0)
+    local p = Popup.new({ target_bufnr = 1, lnum = 1, col = 1 }, { root_winid = 100, prev = nil, depth = 0 })
+    local ok = p:open()
+    assert.is_false(ok)
+    assert.is_nil(p.winid)
   end)
 
-  it("should handle border configuration correctly", function()
-    Stack.empty = stub().returns(true)
-    Stack.size = stub().returns(0)
+  it("popup:close calls nvim_win_close when valid", function()
+    local p = Popup.new({ target_bufnr = 1, lnum = 1, col = 1 }, { root_winid = 100, prev = nil, depth = 0 })
+    p:open()
+    p:close()
+    assert.stub(api_mock.nvim_win_close).was_called_with(1234, false)
+  end)
 
-    -- Test with config border
-    global_mock_config_module.options.ui.border = "single"
-    local popup1 = Popup.new { target_bufnr = TEST_CONSTANTS.DEFAULT_BUF_ID, lnum = 1, col = 1 }
-    assert.are.equal("single", popup1.win_config.border)
+  it("popup:is_valid returns false before open()", function()
+    local p = Popup.new({ target_bufnr = 1, lnum = 1, col = 1 }, { root_winid = 100, prev = nil, depth = 0 })
+    assert.is_false(p:is_valid())
+  end)
 
-    -- Test with vim.o.winborder fallback
-    global_mock_config_module.options.ui.border = nil
-    vim.o.winborder = "rounded"
-    local popup2 = Popup.new { target_bufnr = TEST_CONSTANTS.DEFAULT_BUF_ID, lnum = 1, col = 1 }
-    assert.are.equal("rounded", popup2.win_config.border)
+  it("popup:focus delegates to nvim_set_current_win when valid", function()
+    local p = Popup.new({ target_bufnr = 1, lnum = 1, col = 1 }, { root_winid = 100, prev = nil, depth = 0 })
+    p:open()
+    p:focus()
+    assert.stub(api_mock.nvim_set_current_win).was_called_with(1234)
+  end)
 
-    -- Test with default fallback
-    vim.o.winborder = nil
-    local popup3 = Popup.new { target_bufnr = TEST_CONSTANTS.DEFAULT_BUF_ID, lnum = 1, col = 1 }
-    assert.are.equal("rounded", popup3.win_config.border)
+  it("stacked popup config uses ctx.prev and ctx.depth (no Stack lookup)", function()
+    local prev = { winid = 555, width = 50, height = 10, root_winid = 100 }
+    local p = Popup.new({ target_bufnr = 1, lnum = 1, col = 1, title = "stacked" }, { root_winid = 100, prev = prev, depth = 1 })
+    assert.is_not_nil(p)
+    assert.are.equal(555, p.win_config.win)
+    assert.is_false(p.is_first_popup)
+  end)
+
+  it("popup:open closes the window and unregisters when post-open setup throws", function()
+    api_mock.nvim_win_get_config = stub().invokes(function()
+      error("injected post-open failure")
+    end)
+    local State = require("overlook.state")
+    local cleanup_stub = stub(State, "cleanup_touched_buffer")
+
+    local Popup = require("overlook.popup")
+    local p = Popup.new({ target_bufnr = 1, lnum = 1, col = 1 }, { root_winid = 100, prev = nil, depth = 0 })
+    local ok = p:open()
+
+    assert.is_false(ok)
+    assert.is_nil(p.winid)
+    assert.stub(api_mock.nvim_win_close).was_called_with(1234, true)
+    assert.stub(cleanup_stub).was_called_with(1)
+
+    cleanup_stub:revert()
   end)
 end)
