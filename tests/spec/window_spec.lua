@@ -4,7 +4,6 @@ local Window = require("overlook.window")
 describe("overlook.window registry", function()
   before_each(function()
     Window.instances = {}
-    require("overlook.stack").instances = {}
     vim.w = {}
   end)
 

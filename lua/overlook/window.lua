@@ -10,11 +10,7 @@ Window.__index = Window
 ---@param winid integer
 ---@return OverlookWindow
 function Window.new(winid)
-  -- During the transition, reuse the Stack module's per-host registry so
-  -- popup.lua's internal Stack.empty()/size()/top() reads see the same items
-  -- this Window operates on. Task 4 collapses the Stack facade and this
-  -- becomes `Stack.new()`.
-  return setmetatable({ winid = winid, stack = Stack.win_get_stack(winid) }, Window)
+  return setmetatable({ winid = winid, stack = Stack.new() }, Window)
 end
 
 -- Module-level registry / facade
@@ -166,36 +162,36 @@ end
 
 ---Restore the most recently closed popup.
 function Window:restore()
-  if #self.stack.trash == 0 then
+  local Popup = require("overlook.popup")
+  local data = self.stack:peek_trash()
+  if not data then
     vim.notify("Overlook: No popup to restore", vim.log.levels.WARN)
     return
   end
 
-  local Popup = require("overlook.popup")
-  ---@type OverlookPopup
-  local closed = self.stack.trash[#self.stack.trash]
   local ctx = {
     root_winid = self.winid,
     prev = self.stack:top(),
     depth = self.stack:size(),
   }
-  local restored = Popup.new(closed.opts, ctx)
+  local restored = Popup.new(data.opts, ctx)
   if not restored or not restored:open() then
     vim.notify("Overlook: Failed to restore popup", vim.log.levels.ERROR)
-    return
+    return  -- trash untouched on failure
   end
 
-  table.remove(self.stack.trash, #self.stack.trash)
-  table.insert(self.stack.items, restored)
+  self.stack:pop_trash()
+  self.stack:restore_item(restored)
 end
 
 ---Restore all previously closed popups in this Window's stack.
 function Window:restore_all()
-  while #self.stack.trash > 0 do
-    local before = #self.stack.trash
+  while true do
+    local before = self.stack:peek_trash()
+    if not before then return end
     self:restore()
-    if #self.stack.trash == before then
-      break -- restore failed; stop to avoid infinite loop
+    if self.stack:peek_trash() == before then
+      break -- restore failed; top of trash unchanged. stop.
     end
   end
 end
