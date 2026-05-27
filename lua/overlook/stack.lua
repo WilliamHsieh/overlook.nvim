@@ -10,14 +10,20 @@ function Stack.new()
 end
 
 ---@return integer
-function Stack:size() return #self.items end
+function Stack:size()
+  return #self.items
+end
 
 ---@return boolean
-function Stack:empty() return #self.items == 0 end
+function Stack:empty()
+  return #self.items == 0
+end
 
 ---@return OverlookPopup?
 function Stack:top()
-  if self:empty() then return nil end
+  if self:empty() then
+    return nil
+  end
   return self.items[#self.items]
 end
 
@@ -31,7 +37,9 @@ end
 ---Remove the top popup, append it to trash, return it.
 ---@return OverlookPopup?
 function Stack:pop()
-  if self:empty() then return nil end
+  if self:empty() then
+    return nil
+  end
   local top = table.remove(self.items)
   table.insert(self.trash, top)
   return top
@@ -60,7 +68,9 @@ end
 ---Remove + return the last trash item.
 ---@return OverlookPopup?
 function Stack:pop_trash()
-  if #self.trash == 0 then return nil end
+  if #self.trash == 0 then
+    return nil
+  end
   return table.remove(self.trash)
 end
 

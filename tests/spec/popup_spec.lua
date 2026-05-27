@@ -511,7 +511,10 @@ describe("Popup — lifecycle methods", function()
 
   it("stacked popup config uses ctx.prev and ctx.depth (no Stack lookup)", function()
     local prev = { winid = 555, width = 50, height = 10, root_winid = 100 }
-    local p = Popup.new({ target_bufnr = 1, lnum = 1, col = 1, title = "stacked" }, { root_winid = 100, prev = prev, depth = 1 })
+    local p = Popup.new(
+      { target_bufnr = 1, lnum = 1, col = 1, title = "stacked" },
+      { root_winid = 100, prev = prev, depth = 1 }
+    )
     assert.is_not_nil(p)
     assert.are.equal(555, p.win_config.win)
     assert.is_false(p.is_first_popup)

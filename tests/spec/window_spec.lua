@@ -69,7 +69,7 @@ describe("Window:open_popup — happy path", function()
 
   it("opens a popup, pushes it, preserves the invariant", function()
     local w = Window.current()
-    local p = w:open_popup({ target_bufnr = make_buf(), lnum = 1, col = 1, title = "t" })
+    local p = w:open_popup { target_bufnr = make_buf(), lnum = 1, col = 1, title = "t" }
     assert.is_not_nil(p)
     assert.is_true(p:is_valid())
     assert.are.equal(1, w.stack:size())
@@ -80,11 +80,11 @@ describe("Window:open_popup — happy path", function()
 
   it("stacks multiple popups; invariant holds at every step", function()
     local w = Window.current()
-    local p1 = w:open_popup({ target_bufnr = make_buf(), lnum = 1, col = 1, title = "1" })
+    local p1 = w:open_popup { target_bufnr = make_buf(), lnum = 1, col = 1, title = "1" }
     assert_invariant(w)
-    local p2 = w:open_popup({ target_bufnr = make_buf(), lnum = 1, col = 1, title = "2" })
+    local p2 = w:open_popup { target_bufnr = make_buf(), lnum = 1, col = 1, title = "2" }
     assert_invariant(w)
-    local p3 = w:open_popup({ target_bufnr = make_buf(), lnum = 1, col = 1, title = "3" })
+    local p3 = w:open_popup { target_bufnr = make_buf(), lnum = 1, col = 1, title = "3" }
     assert_invariant(w)
     assert.are.equal(3, w.stack:size())
     assert.are.equal(p3, w.stack:top())
@@ -104,9 +104,11 @@ describe("Window:open_popup — rollback", function()
     local w = Window.current()
     local windows_before = #api.nvim_list_wins()
     local original = api.nvim_open_win
-    api.nvim_open_win = function() return 0 end
+    api.nvim_open_win = function()
+      return 0
+    end
 
-    local p = w:open_popup({ target_bufnr = make_buf(), lnum = 1, col = 1 })
+    local p = w:open_popup { target_bufnr = make_buf(), lnum = 1, col = 1 }
 
     api.nvim_open_win = original
 
@@ -121,9 +123,11 @@ describe("Window:open_popup — rollback", function()
     local windows_before = #api.nvim_list_wins()
     -- Force the post-open path to throw by making nvim_win_get_config error.
     local original = api.nvim_win_get_config
-    api.nvim_win_get_config = function() error("boom") end
+    api.nvim_win_get_config = function()
+      error("boom")
+    end
 
-    local p = w:open_popup({ target_bufnr = make_buf(), lnum = 1, col = 1 })
+    local p = w:open_popup { target_bufnr = make_buf(), lnum = 1, col = 1 }
 
     api.nvim_win_get_config = original
 
@@ -145,8 +149,8 @@ describe("Window:close_all", function()
   it("closes all popups, empties the stack, refocuses root, preserves invariant", function()
     local root = api.nvim_get_current_win()
     local w = Window.current()
-    local p1 = w:open_popup({ target_bufnr = make_buf(), lnum = 1, col = 1 })
-    local p2 = w:open_popup({ target_bufnr = make_buf(), lnum = 1, col = 1 })
+    local p1 = w:open_popup { target_bufnr = make_buf(), lnum = 1, col = 1 }
+    local p2 = w:open_popup { target_bufnr = make_buf(), lnum = 1, col = 1 }
     local winid1, winid2 = p1.winid, p2.winid
 
     w:close_all()
@@ -169,8 +173,8 @@ describe("Window:on_popup_closed", function()
 
   it("reconciles a top close: pops, refocuses new top, preserves invariant", function()
     local w = Window.current()
-    local p1 = w:open_popup({ target_bufnr = make_buf(), lnum = 1, col = 1 })
-    local p2 = w:open_popup({ target_bufnr = make_buf(), lnum = 1, col = 1 })
+    local p1 = w:open_popup { target_bufnr = make_buf(), lnum = 1, col = 1 }
+    local p2 = w:open_popup { target_bufnr = make_buf(), lnum = 1, col = 1 }
 
     -- Simulate p2 closing under us (suppress WinClosed so we drive reconciliation manually).
     vim.opt.eventignore:append("WinClosed")
@@ -187,9 +191,9 @@ describe("Window:on_popup_closed", function()
 
   it("reconciles a MIDDLE hole: removes the middle item, leaves siblings intact", function()
     local w = Window.current()
-    local p1 = w:open_popup({ target_bufnr = make_buf(), lnum = 1, col = 1 })
-    local p2 = w:open_popup({ target_bufnr = make_buf(), lnum = 1, col = 1 })
-    local p3 = w:open_popup({ target_bufnr = make_buf(), lnum = 1, col = 1 })
+    local p1 = w:open_popup { target_bufnr = make_buf(), lnum = 1, col = 1 }
+    local p2 = w:open_popup { target_bufnr = make_buf(), lnum = 1, col = 1 }
+    local p3 = w:open_popup { target_bufnr = make_buf(), lnum = 1, col = 1 }
 
     vim.opt.eventignore:append("WinClosed")
     api.nvim_win_close(p2.winid, true)
@@ -215,9 +219,9 @@ describe("Window:prune_invalid", function()
 
   it("pops invalid tops until a valid top is found", function()
     local w = Window.current()
-    local p1 = w:open_popup({ target_bufnr = make_buf(), lnum = 1, col = 1 })
-    local p2 = w:open_popup({ target_bufnr = make_buf(), lnum = 1, col = 1 })
-    local p3 = w:open_popup({ target_bufnr = make_buf(), lnum = 1, col = 1 })
+    local p1 = w:open_popup { target_bufnr = make_buf(), lnum = 1, col = 1 }
+    local p2 = w:open_popup { target_bufnr = make_buf(), lnum = 1, col = 1 }
+    local p3 = w:open_popup { target_bufnr = make_buf(), lnum = 1, col = 1 }
 
     -- Close p3 and p2 manually without firing WinClosed; both top entries are now stale.
     vim.opt.eventignore:append("WinClosed")
@@ -244,8 +248,8 @@ describe("Window.find_by_popup_winid", function()
 
   it("finds a popup in any stack position, not just the top", function()
     local w = Window.current()
-    local p1 = w:open_popup({ target_bufnr = make_buf(), lnum = 1, col = 1 })
-    local p2 = w:open_popup({ target_bufnr = make_buf(), lnum = 1, col = 1 })
+    local p1 = w:open_popup { target_bufnr = make_buf(), lnum = 1, col = 1 }
+    local p2 = w:open_popup { target_bufnr = make_buf(), lnum = 1, col = 1 }
     assert.are.equal(w, Window.find_by_popup_winid(p1.winid))
     assert.are.equal(w, Window.find_by_popup_winid(p2.winid))
     assert.is_nil(Window.find_by_popup_winid(99999))
@@ -264,13 +268,13 @@ describe("init.lua WinClosed integration", function()
     -- via setup() with clear=true is idempotent). Earlier describe blocks reset
     -- Window.instances = {} in their before_each, so find_by_popup_winid returns
     -- nil for any popups they create and the autocmd's branch is a no-op there.
-    require("overlook").setup({})
+    require("overlook").setup {}
   end)
 
   it("closing a popup window triggers stack reconciliation via the autocmd", function()
     local w = Window.current()
-    local p1 = w:open_popup({ target_bufnr = make_buf(), lnum = 1, col = 1 })
-    local p2 = w:open_popup({ target_bufnr = make_buf(), lnum = 1, col = 1 })
+    local p1 = w:open_popup { target_bufnr = make_buf(), lnum = 1, col = 1 }
+    local p2 = w:open_popup { target_bufnr = make_buf(), lnum = 1, col = 1 }
 
     -- Real close — WinClosed should fire and Window:on_popup_closed should reconcile.
     api.nvim_win_close(p2.winid, true)

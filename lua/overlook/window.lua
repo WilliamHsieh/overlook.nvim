@@ -115,7 +115,9 @@ function Window:close_all(force)
 
   while not self.stack:empty() do
     local top = self.stack:top()
-    if top then top:close(force) end
+    if top then
+      top:close(force)
+    end
     self.stack:pop()
   end
 
@@ -128,7 +130,9 @@ end
 function Window:prune_invalid()
   while not self.stack:empty() do
     local top = self.stack:top()
-    if top and top:is_valid() then return end
+    if top and top:is_valid() then
+      return
+    end
     self.stack:pop()
   end
 end
@@ -177,7 +181,7 @@ function Window:restore()
   local restored = Popup.new(data.opts, ctx)
   if not restored or not restored:open() then
     vim.notify("Overlook: Failed to restore popup", vim.log.levels.ERROR)
-    return  -- trash untouched on failure
+    return -- trash untouched on failure
   end
 
   self.stack:pop_trash()
@@ -188,7 +192,9 @@ end
 function Window:restore_all()
   while true do
     local before = self.stack:peek_trash()
-    if not before then return end
+    if not before then
+      return
+    end
     self:restore()
     if self.stack:peek_trash() == before then
       break -- restore failed; top of trash unchanged. stop.
@@ -211,13 +217,19 @@ function Window:switch_focus()
 end
 
 ---@return OverlookPopup?
-function Window:top() return self.stack:top() end
+function Window:top()
+  return self.stack:top()
+end
 
 ---@return integer
-function Window:size() return self.stack:size() end
+function Window:size()
+  return self.stack:size()
+end
 
 ---@return boolean
-function Window:empty() return self.stack:empty() end
+function Window:empty()
+  return self.stack:empty()
+end
 
 ---Scan all hosts for a popup with this winid. Used by the WinClosed autocmd.
 ---Iterates every position in every stack (not just tops) because non-top popups

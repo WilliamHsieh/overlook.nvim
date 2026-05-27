@@ -36,7 +36,9 @@ describe("overlook.peek", function()
     -- Inject mocks using package.loaded trick
     package.loaded["overlook.adapter.marks"] = mock_marks_adapter
     package.loaded["overlook.window"] = {
-      current = function() return fake_window end,
+      current = function()
+        return fake_window
+      end,
     }
 
     -- Reload the peek module to use the mocks

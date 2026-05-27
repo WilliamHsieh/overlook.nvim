@@ -17,7 +17,11 @@ end
 -- Helper to set what Window.current():top() returns
 local function set_window_top(top_value)
   Window.current = function()
-    return { top = function() return top_value end }
+    return {
+      top = function()
+        return top_value
+      end,
+    }
   end
 end
 
@@ -106,7 +110,7 @@ describe("overlook.state", function()
       mock_api("nvim_get_current_win", function()
         return 1
       end)
-      set_window_top({ winid = 1, buf_id = 10 })
+      set_window_top { winid = 1, buf_id = 10 }
       mock_api("nvim_buf_get_name", function(buf_id)
         return "/some/path/my_file.py"
       end)
@@ -138,7 +142,7 @@ describe("overlook.state", function()
       mock_api("nvim_get_current_win", function()
         return 1
       end)
-      set_window_top({ winid = 1, buf_id = 10 })
+      set_window_top { winid = 1, buf_id = 10 }
       mock_api("nvim_buf_get_name", function(buf_id)
         return ""
       end)
@@ -158,7 +162,7 @@ describe("overlook.state", function()
       mock_api("nvim_get_current_win", function()
         return 2
       end)
-      set_window_top({ winid = 1, buf_id = 10 })
+      set_window_top { winid = 1, buf_id = 10 }
 
       -- Act
       state.update_title() -- Use state module function
@@ -186,7 +190,7 @@ describe("overlook.state", function()
       mock_api("nvim_get_current_win", function()
         return 1
       end)
-      set_window_top({ winid = 1, buf_id = 10 })
+      set_window_top { winid = 1, buf_id = 10 }
       mock_api("nvim_win_get_config", function(winid)
         error("Config error!")
       end)

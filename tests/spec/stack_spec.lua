@@ -16,7 +16,9 @@ describe("Stack — basic LIFO", function()
   it("push/pop maintains LIFO order", function()
     local s = Stack.new()
     local a, b, c = popup(1), popup(2), popup(3)
-    s:push(a); s:push(b); s:push(c)
+    s:push(a)
+    s:push(b)
+    s:push(c)
     assert.are.equal(3, s:size())
     assert.are.equal(c, s:top())
     assert.are.equal(c, s:pop())
@@ -33,9 +35,10 @@ describe("Stack — basic LIFO", function()
 
   it("push clears trash (new popup invalidates redo history)", function()
     local s = Stack.new()
-    s:push(popup(1)); s:pop()       -- trash: [{1}]
+    s:push(popup(1))
+    s:pop() -- trash: [{1}]
     assert.are.equal(1, #s.trash)
-    s:push(popup(2))                -- new push -> clear trash
+    s:push(popup(2)) -- new push -> clear trash
     assert.are.equal(0, #s.trash)
   end)
 end)
@@ -52,8 +55,10 @@ describe("Stack — trash and restore", function()
   it("pop_trash removes and returns the last trash item", function()
     local s = Stack.new()
     local a, b = popup(1), popup(2)
-    s:push(a); s:push(b)            -- build stack: [a, b]
-    s:pop(); s:pop()                -- trash: [b, a] (b popped first, then a)
+    s:push(a)
+    s:push(b) -- build stack: [a, b]
+    s:pop()
+    s:pop() -- trash: [b, a] (b popped first, then a)
     assert.are.equal(a, s:pop_trash())
     assert.are.equal(b, s:pop_trash())
     assert.is_nil(s:pop_trash())
@@ -62,10 +67,12 @@ describe("Stack — trash and restore", function()
   it("restore_item appends to items WITHOUT clearing trash", function()
     local s = Stack.new()
     local a, b = popup(1), popup(2)
-    s:push(a); s:push(b)            -- build stack: [a, b]
-    s:pop(); s:pop()                -- trash: [b, a]
-    local restored = s:pop_trash()  -- pops a; trash: [b]
-    s:restore_item(restored)        -- items: [a]; trash MUST remain [b]
+    s:push(a)
+    s:push(b) -- build stack: [a, b]
+    s:pop()
+    s:pop() -- trash: [b, a]
+    local restored = s:pop_trash() -- pops a; trash: [b]
+    s:restore_item(restored) -- items: [a]; trash MUST remain [b]
     assert.are.equal(1, #s.trash)
     assert.are.equal(b, s.trash[1])
     assert.are.equal(a, s:top())
@@ -75,7 +82,9 @@ end)
 describe("Stack — remove_by_winid", function()
   it("removes a top item and moves it to trash", function()
     local s = Stack.new()
-    s:push(popup(1)); s:push(popup(2)); s:push(popup(3))
+    s:push(popup(1))
+    s:push(popup(2))
+    s:push(popup(3))
     local removed = s:remove_by_winid(3)
     assert.are.equal(3, removed.winid)
     assert.are.equal(2, s:size())
@@ -85,7 +94,9 @@ describe("Stack — remove_by_winid", function()
 
   it("removes a middle item and moves it to trash", function()
     local s = Stack.new()
-    s:push(popup(1)); s:push(popup(2)); s:push(popup(3))
+    s:push(popup(1))
+    s:push(popup(2))
+    s:push(popup(3))
     local removed = s:remove_by_winid(2)
     assert.are.equal(2, removed.winid)
     assert.are.equal(2, s:size())
@@ -96,7 +107,8 @@ describe("Stack — remove_by_winid", function()
 
   it("returns nil and does not mutate when winid is absent", function()
     local s = Stack.new()
-    s:push(popup(1)); s:push(popup(2))
+    s:push(popup(1))
+    s:push(popup(2))
     assert.is_nil(s:remove_by_winid(999))
     assert.are.equal(2, s:size())
     assert.are.equal(0, #s.trash)

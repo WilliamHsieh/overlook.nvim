@@ -81,8 +81,11 @@ function Popup:config_for_first_popup()
   local width = math.max(Config.ui.min_width, target_width)
 
   local win_config = {
-    relative = "win", style = "minimal", focusable = true,
-    width = width, height = height,
+    relative = "win",
+    style = "minimal",
+    focusable = true,
+    width = width,
+    height = height,
     win = current_winid,
     zindex = Config.ui.z_index_base,
     col = screen_space_left + Config.ui.col_offset,
@@ -99,7 +102,9 @@ end
 ---@param depth integer
 function Popup:config_for_stacked_popup(prev, depth)
   return {
-    relative = "win", style = "minimal", focusable = true,
+    relative = "win",
+    style = "minimal",
+    focusable = true,
     win = prev.winid,
     zindex = Config.ui.z_index_base + depth,
     width = math.max(Config.ui.min_width, prev.width - Config.ui.width_decrement),

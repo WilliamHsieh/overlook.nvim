@@ -20,7 +20,9 @@ describe("Cursor Adapter", function()
       end,
     }
     package.loaded["overlook.window"] = {
-      current = function() return fake_window end,
+      current = function()
+        return fake_window
+      end,
     }
 
     -- Store and mock vim.notify
