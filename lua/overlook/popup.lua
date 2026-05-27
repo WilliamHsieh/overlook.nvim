@@ -167,8 +167,10 @@ function Popup:open()
   end)
 
   if not ok then
-    pcall(api.nvim_win_close, self.winid, true)
-    State.cleanup_touched_buffer(self.opts.target_bufnr)
+    local close_ok, close_err = pcall(api.nvim_win_close, self.winid, true)
+    if not close_ok then
+      vim.notify("Overlook: rollback close failed: " .. tostring(close_err), vim.log.levels.ERROR)
+    end
     self.winid = nil
     vim.notify("Overlook: post-open setup failed: " .. tostring(err), vim.log.levels.ERROR)
     return false
