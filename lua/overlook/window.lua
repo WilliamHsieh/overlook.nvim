@@ -77,7 +77,7 @@ function Window:promote(open_command)
   ---@diagnostic disable-next-line: unused-local
   local _bufnum, lnum, col, _off = unpack(vim.fn.getpos("."))
 
-  self.stack:clear()
+  self:close_all()
 
   if not buf_id or not api.nvim_buf_is_valid(buf_id) then
     vim.notify(
@@ -100,6 +100,135 @@ function Window:promote(open_command)
 
   Popup.set_cursor_position(0, lnum, col)
   vim.bo.buflisted = true
+end
+
+---Close all popups in this Window's stack atomically.
+---Suppresses WinClosed during the bulk close to prevent re-entrant reconciliation,
+---then refocuses the root window.
+---@param force? boolean
+function Window:close_all(force)
+  vim.opt.eventignore:append("WinClosed")
+
+  while not self.stack:empty() do
+    local top = self.stack:top()
+    if top and api.nvim_win_is_valid(top.winid) then
+      api.nvim_win_close(top.winid, force or false)
+    end
+    self.stack:pop()
+  end
+
+  vim.opt.eventignore:remove("WinClosed")
+  pcall(api.nvim_set_current_win, self.winid)
+end
+
+---Pop popups from the top while the top popup's window is invalid.
+---Used as a reconciliation safety net.
+function Window:prune_invalid()
+  while not self.stack:empty() do
+    local top = self.stack:top()
+    if top and api.nvim_win_is_valid(top.winid) then
+      return
+    end
+    self.stack:pop()
+  end
+end
+
+---WinClosed reconciliation: a popup window is already gone; bring the stack in sync.
+---Always refocuses (the closed window was typically the focused one).
+---@param winid integer The closed popup's window id.
+function Window:on_popup_closed(winid)
+  self.stack:remove_by_winid(winid)
+  self:prune_invalid()
+
+  local top = self.stack:top()
+  if top and api.nvim_win_is_valid(top.winid) then
+    pcall(api.nvim_set_current_win, top.winid)
+  else
+    pcall(api.nvim_set_current_win, self.winid)
+
+    local config = require("overlook.config").get()
+    if type(config.on_stack_empty) == "function" then
+      local ok, err = pcall(config.on_stack_empty)
+      if not ok then
+        vim.notify("Overlook Error: on_stack_empty callback failed: " .. tostring(err), vim.log.levels.ERROR)
+      end
+    end
+  end
+
+  vim.schedule(function()
+    require("overlook.state").update_keymap()
+  end)
+end
+
+---Restore the most recently closed popup.
+function Window:restore()
+  if #self.stack.trash == 0 then
+    vim.notify("Overlook: No popup to restore", vim.log.levels.WARN)
+    return
+  end
+
+  local Popup = require("overlook.popup")
+  ---@type OverlookPopup
+  local closed = self.stack.trash[#self.stack.trash]
+  local restored = Popup.new(closed.opts)
+  if not restored then
+    vim.notify("Overlook: Failed to restore popup", vim.log.levels.ERROR)
+    return
+  end
+
+  table.remove(self.stack.trash, #self.stack.trash)
+  table.insert(self.stack.items, restored)
+end
+
+---Restore all previously closed popups in this Window's stack.
+function Window:restore_all()
+  while #self.stack.trash > 0 do
+    local before = #self.stack.trash
+    self:restore()
+    if #self.stack.trash == before then
+      break -- restore failed; stop to avoid infinite loop
+    end
+  end
+end
+
+---Toggle focus between the top popup and the root window.
+function Window:switch_focus()
+  local switch_to
+  if vim.w.is_overlook_popup then
+    switch_to = self.winid
+  elseif not self.stack:empty() then
+    switch_to = self.stack:top().winid
+  end
+  if not switch_to then
+    vim.notify("Overlook: no popup to focus", vim.log.levels.INFO)
+    return
+  end
+  pcall(api.nvim_set_current_win, switch_to)
+end
+
+---@return OverlookPopup?
+function Window:top() return self.stack:top() end
+
+---@return integer
+function Window:size() return self.stack:size() end
+
+---@return boolean
+function Window:empty() return self.stack:empty() end
+
+---Scan all hosts for a popup with this winid. Used by the WinClosed autocmd.
+---Iterates every position in every stack (not just tops) because non-top popups
+---can close (see spec §5).
+---@param winid integer
+---@return OverlookWindow?
+function M.find_by_popup_winid(winid)
+  for _, w in pairs(M.instances) do
+    for _, item in ipairs(w.stack.items) do
+      if item.winid == winid then
+        return w
+      end
+    end
+  end
+  return nil
 end
 
 return M

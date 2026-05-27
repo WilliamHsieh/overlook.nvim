@@ -1,6 +1,5 @@
 local api = vim.api
 local Config = require("overlook.config")
-local Stack = require("overlook.stack")
 
 local M = {}
 
@@ -66,7 +65,7 @@ function M.update_keymap()
     return -- Avoid errors if buffer somehow invalid
   end
 
-  local top_item = Stack.top() -- Use local require
+  local top_item = require("overlook.window").current():top()
   local top_win_id = top_item and top_item.winid or nil
   local close_key = Config.get().ui.keys.close
 
@@ -126,7 +125,7 @@ function M.update_title()
     return
   end
 
-  local top_item = Stack.top() -- Use local require
+  local top_item = require("overlook.window").current():top()
   local top_win_id = top_item and top_item.winid or nil
 
   -- Only act if the current window IS the top overlook popup

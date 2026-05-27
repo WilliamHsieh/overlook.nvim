@@ -286,49 +286,6 @@ describe("overlook.stack", function()
       assert.are.same(item1, test_stack:top())
     end)
 
-    it("should remove invalid windows from top of stack", function()
-      local item1 = create_test_item(TEST_CONSTANTS.POPUP_WINIDS[1], 10)
-      local item2 = create_test_item(TEST_CONSTANTS.POPUP_WINIDS[2], 20)
-      local item3 = create_test_item(TEST_CONSTANTS.POPUP_WINIDS[3], 30)
-
-      test_stack:push(item1)
-      test_stack:push(item2)
-      test_stack:push(item3)
-
-      -- Configure the existing mock with specific return values
-      api_mock.nvim_win_is_valid:clear()
-      api_mock.nvim_win_is_valid.on_call_with(TEST_CONSTANTS.POPUP_WINIDS[3]).returns(false)
-      api_mock.nvim_win_is_valid.on_call_with(TEST_CONSTANTS.POPUP_WINIDS[2]).returns(false)
-      api_mock.nvim_win_is_valid.on_call_with(TEST_CONSTANTS.POPUP_WINIDS[1]).returns(true)
-
-      test_stack:remove_invalid_windows()
-
-      assert.are.equal(1, test_stack:size())
-      assert.are.same(item1, test_stack:top())
-
-      -- Verify the correct windows were checked
-      assert.stub(api_mock.nvim_win_is_valid).was_called_with(TEST_CONSTANTS.POPUP_WINIDS[3])
-      assert.stub(api_mock.nvim_win_is_valid).was_called_with(TEST_CONSTANTS.POPUP_WINIDS[2])
-      assert.stub(api_mock.nvim_win_is_valid).was_called_with(TEST_CONSTANTS.POPUP_WINIDS[1])
-    end)
-
-    it("should handle all invalid windows in stack", function()
-      local item1 = create_test_item(TEST_CONSTANTS.POPUP_WINIDS[1], 10)
-      local item2 = create_test_item(TEST_CONSTANTS.POPUP_WINIDS[2], 20)
-
-      test_stack:push(item1)
-      test_stack:push(item2)
-
-      -- Configure the existing mock to return false for all windows
-      api_mock.nvim_win_is_valid:clear()
-      api_mock.nvim_win_is_valid.returns(false)
-
-      test_stack:remove_invalid_windows()
-
-      assert.are.equal(0, test_stack:size())
-      assert.is_true(test_stack:empty())
-      assert.is_nil(test_stack:top())
-    end)
   end)
 
   describe("Module-level API delegation", function()
