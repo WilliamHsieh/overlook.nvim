@@ -56,7 +56,7 @@ onto the `Window` object.
 api.lua / peek.lua / init.lua / state.lua
                  |
                  v
-        window.lua  (Window object + registry)   <-- top-level entry point
+        window.lua  (Window object + host registry)
                  |  owns one
                  v
          stack.lua  (pure data structure)
@@ -66,6 +66,18 @@ api.lua / peek.lua / init.lua / state.lua
 ```
 
 `peek.lua` and `popup.lua` no longer `require("overlook.stack")`.
+
+### Placement rule (Window vs Popup)
+
+A function belongs on `Window` if it needs **stack information** (e.g. `prev`,
+`depth`, `trash`, `top`) **or** modifies **multiple popups at once** (e.g.
+`close_all`, `prune_invalid`, `promote`). Otherwise it belongs on `Popup`. Stack
+methods are pure data operations and live on `Stack`.
+
+Callers wire to whichever module the operation belongs to — not everything has
+to start from `window.lua`. `peek.lua` reaches into `Window` because creating a
+stacked popup is a stack-aware transaction; `state.lua` calls `Popup` methods
+directly on the top popup once it has obtained that popup from `Window`.
 
 ### 3.1 `stack.lua` — pure data structure
 
@@ -170,10 +182,12 @@ Window:on_popup_closed(winid)
 Window:restore()
 Window:restore_all()
 Window:promote(open_command)
-Window:focus()
 Window:switch_focus()
 Window:prune_invalid()
 Window:top() / Window:size() / Window:empty()  -- thin delegates to self.stack
+-- (focusing the root window is a one-liner inlined at call sites in
+--  close_all and on_popup_closed; it is neither stack-aware nor multi-popup,
+--  so by the placement rule it does not earn its own method)
 ```
 
 - `M.current()` — if `vim.w.is_overlook_popup` is set, resolve to
