@@ -136,7 +136,7 @@ local defaults = {
   adapters = {
     -- check `overlook.adapter.cursor` for implementation details
     your_custom_adapter = {
-      ---@return OverlookPopupOptions? @Table suitable for overlook.ui.create_popup, or nil on error.
+      ---@return OverlookPopupOptions? @Table suitable for Window:open_popup, or nil on error.
       get = function() end,
     },
   },

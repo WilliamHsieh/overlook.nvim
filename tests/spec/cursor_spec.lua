@@ -1,8 +1,6 @@
 describe("Cursor Adapter", function()
-  local peek_mod = require("overlook.peek")
-  local ui_mod = require("overlook.ui")
+  local peek_mod
 
-  local original_create_popup
   local original_notify
   local mock_calls
   local original_get_current_buf -- Store original vim.api.nvim_get_current_buf
@@ -11,15 +9,19 @@ describe("Cursor Adapter", function()
   before_each(function()
     -- Reset mock calls table
     mock_calls = {
-      create_popup = {},
+      open_popup = {},
       notify = {},
     }
 
-    -- Store and mock ui.create_popup
-    original_create_popup = ui_mod.create_popup
-    ui_mod.create_popup = function(opts)
-      table.insert(mock_calls.create_popup, opts)
-    end
+    -- Stub overlook.window so peek doesn't need a real Neovim window
+    local fake_window = {
+      open_popup = function(_, opts)
+        table.insert(mock_calls.open_popup, opts)
+      end,
+    }
+    package.loaded["overlook.window"] = {
+      current = function() return fake_window end,
+    }
 
     -- Store and mock vim.notify
     original_notify = vim.notify
@@ -43,17 +45,17 @@ describe("Cursor Adapter", function()
       end
       return original_getpos(target) -- Call original for other targets
     end
+
+    -- Reload peek so it picks up the window stub
+    package.loaded["overlook.peek"] = nil
+    peek_mod = require("overlook.peek")
   end)
 
   after_each(function()
     -- Restore original functions
-    if original_create_popup then
-      ui_mod.create_popup = original_create_popup
-    end
     if original_notify then
       vim.notify = original_notify
     end
-    original_create_popup = nil
     original_notify = nil
 
     if original_get_current_buf then
@@ -65,6 +67,10 @@ describe("Cursor Adapter", function()
       vim.fn.getpos = original_getpos
     end
     original_getpos = nil
+
+    -- Clean up stubs
+    package.loaded["overlook.window"] = nil
+    package.loaded["overlook.peek"] = nil
 
     -- Clean up any test buffers if needed
     pcall(vim.cmd, "bw! test_buffer.txt")
@@ -99,8 +105,8 @@ describe("Cursor Adapter", function()
     peek_mod.cursor()
 
     -- Assert
-    assert.are.equal(1, #mock_calls.create_popup)
-    local call_args = mock_calls.create_popup[1]
+    assert.are.equal(1, #mock_calls.open_popup)
+    local call_args = mock_calls.open_popup[1]
     assert.is_table(call_args)
     assert.matches("test_buffer.txt", call_args.title) -- Expect filename again
     assert.are.equal(expected_bufnr, call_args.target_bufnr) -- target_bufnr should be the actual buffer
@@ -134,7 +140,7 @@ describe("Cursor Adapter", function()
     peek_mod.cursor()
 
     -- Assert
-    assert.are.equal(0, #mock_calls.create_popup) -- Should not be called
+    assert.are.equal(0, #mock_calls.open_popup) -- Should not be called
     assert.are.equal(2, #mock_calls.notify)
     local notify_call = mock_calls.notify[1]
     assert.matches("Cannot peek in unnamed buffer", notify_call.msg) -- Use matches for flexibility

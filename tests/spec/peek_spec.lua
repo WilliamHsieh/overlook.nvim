@@ -1,7 +1,7 @@
 describe("overlook.peek", function()
   local peek_mod
   local mock_marks_adapter
-  local mock_ui
+  local fake_window
   local create_popup_calls
   local marks_get_calls
 
@@ -27,15 +27,17 @@ describe("overlook.peek", function()
     }
 
     create_popup_calls = {}
-    mock_ui = {
-      create_popup = function(opts)
+    fake_window = {
+      open_popup = function(_, opts)
         table.insert(create_popup_calls, opts)
       end,
     }
 
     -- Inject mocks using package.loaded trick
     package.loaded["overlook.adapter.marks"] = mock_marks_adapter
-    package.loaded["overlook.ui"] = mock_ui
+    package.loaded["overlook.window"] = {
+      current = function() return fake_window end,
+    }
 
     -- Reload the peek module to use the mocks
     package.loaded["overlook.peek"] = nil
@@ -46,7 +48,7 @@ describe("overlook.peek", function()
     -- Restore originals
     vim.notify = original_notify
     package.loaded["overlook.adapter.marks"] = nil
-    package.loaded["overlook.ui"] = nil
+    package.loaded["overlook.window"] = nil
     package.loaded["overlook.peek"] = nil
   end)
 

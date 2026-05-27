@@ -11,7 +11,7 @@
 
 local Peek = require("overlook.peek")
 local Stack = require("overlook.stack")
-local Ui = require("overlook.ui")
+local Window = require("overlook.window")
 
 local M = {}
 
@@ -169,7 +169,7 @@ end
 ---@param open_command 'vsplit' | 'split' | 'tabnew' Vim command to open the window.
 local promote_top_to_window = function(open_command)
   local cmd = string.format("%s | buffer", open_command)
-  Ui.promote_popup_to_window(cmd)
+  Window.current():promote(cmd)
 end
 
 --- Open the top popup to a horizontal split window.
@@ -240,7 +240,7 @@ end
 ---@tag overlook-api.open_in_original_window
 ---@toc_entry
 M.open_in_original_window = function()
-  Ui.promote_popup_to_window("buffer")
+  Window.current():promote("buffer")
 end
 
 return M
