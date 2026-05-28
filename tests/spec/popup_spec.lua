@@ -79,6 +79,7 @@ local function setup_common_mocks()
 
   -- Popup creation mocks
   api_mock.nvim_buf_is_valid.returns(true)
+  api_mock.nvim_win_is_valid.returns(true)
   api_mock.nvim_open_win.returns(TEST_CONSTANTS.POPUP_WINIDS[1])
   api_mock.nvim_win_get_config.returns {}
   api_mock.nvim_create_augroup.returns(TEST_CONSTANTS.AUGROUP_ID)
@@ -532,5 +533,23 @@ describe("Popup — lifecycle methods", function()
     assert.is_false(ok)
     assert.is_nil(p.winid)
     assert.stub(api_mock.nvim_win_close).was_called_with(1234, true)
+  end)
+
+  it("first popup config uses ctx.root_winid (not nvim_get_current_win)", function()
+    -- Simulate "user's focus is in window 7777 but they want the popup on window 100"
+    api_mock.nvim_get_current_win.returns(7777) -- focus is elsewhere
+    -- nvim_win_get_cursor must be called on root_winid (100), not 7777:
+    api_mock.nvim_win_get_cursor = stub()
+    api_mock.nvim_win_get_cursor.on_call_with(100).returns({ 5, 10 })
+    api_mock.nvim_win_get_cursor.on_call_with(7777).returns({ 99, 99 }) -- if used, popup would mispoint
+
+    local Popup = require("overlook.popup")
+    local p = Popup.new({ target_bufnr = 1, lnum = 1, col = 1 }, { root_winid = 100, prev = nil, depth = 0 })
+    assert.is_not_nil(p)
+    assert.are.equal(100, p.root_winid) -- ctx.root_winid honored
+    assert.are.equal(100, p.win_config.win) -- anchor is ctx.root_winid
+    -- The popup's cursor calculations must have used winid 100, not 7777:
+    assert.stub(api_mock.nvim_win_get_cursor).was_called_with(100)
+    assert.stub(api_mock.nvim_win_get_cursor).was_not_called_with(7777)
   end)
 end)

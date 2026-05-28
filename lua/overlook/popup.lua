@@ -56,15 +56,16 @@ function Popup:initialize_state(opts)
   return true
 end
 
-function Popup:config_for_first_popup()
-  local current_winid = api.nvim_get_current_win()
-  local cursor_buf_pos = api.nvim_win_get_cursor(current_winid)
-  local cursor_abs_screen_pos = vim.fn.screenpos(current_winid, cursor_buf_pos[1], cursor_buf_pos[2] + 1)
-  local win_pos = api.nvim_win_get_position(current_winid)
+---@param root_winid integer  The host window the popup should be anchored to
+---@return vim.api.keyset.win_config
+function Popup:config_for_first_popup(root_winid)
+  local cursor_buf_pos = api.nvim_win_get_cursor(root_winid)
+  local cursor_abs_screen_pos = vim.fn.screenpos(root_winid, cursor_buf_pos[1], cursor_buf_pos[2] + 1)
+  local win_pos = api.nvim_win_get_position(root_winid)
 
   local winbar_enabled = vim.o.winbar ~= ""
-  local max_window_height = api.nvim_win_get_height(current_winid) - (winbar_enabled and 1 or 0)
-  local max_window_width = api.nvim_win_get_width(current_winid)
+  local max_window_height = api.nvim_win_get_height(root_winid) - (winbar_enabled and 1 or 0)
+  local max_window_width = api.nvim_win_get_width(root_winid)
 
   local screen_space_above = cursor_abs_screen_pos.row - win_pos[1] - 1 - (winbar_enabled and 1 or 0)
   local screen_space_below = max_window_height - screen_space_above - 1
@@ -86,7 +87,7 @@ function Popup:config_for_first_popup()
     focusable = true,
     width = width,
     height = height,
-    win = current_winid,
+    win = root_winid,
     zindex = Config.ui.z_index_base,
     col = screen_space_left + Config.ui.col_offset,
   }
@@ -95,7 +96,7 @@ function Popup:config_for_first_popup()
   else
     win_config.row = screen_space_above + 1 + Config.ui.row_offset
   end
-  return win_config, current_winid
+  return win_config
 end
 
 ---@param prev OverlookPopup
@@ -116,12 +117,15 @@ end
 
 ---@param ctx OverlookPopupContext
 function Popup:determine_window_configuration(ctx)
+  if not api.nvim_win_is_valid(ctx.root_winid) then
+    vim.notify("Overlook: invalid root_winid in popup ctx", vim.log.levels.ERROR)
+    return false
+  end
   local win_cfg
   if ctx.prev == nil then
     self.is_first_popup = true
-    local cfg, current_winid = self:config_for_first_popup()
-    win_cfg = cfg
-    self.root_winid = current_winid
+    win_cfg = self:config_for_first_popup(ctx.root_winid)
+    self.root_winid = ctx.root_winid
   else
     self.is_first_popup = false
     win_cfg = self:config_for_stacked_popup(ctx.prev, ctx.depth)
@@ -145,11 +149,18 @@ function Popup:determine_window_configuration(ctx)
   return true
 end
 
----Open the float. Internal rollback: if post-open setup throws, close the
----half-created window and return false. Caller (Window) checks the return.
+---Open the float. `enter` controls whether focus moves to the new popup
+---(default true). Pass false to open without stealing focus -- used by
+---restore_all so focus never moves through the intermediate popups.
+---Internal rollback: if post-open setup throws, close the half-created window
+---and return false. Caller (Window) checks the return.
+---@param enter? boolean
 ---@return boolean ok
-function Popup:open()
-  self.winid = api.nvim_open_win(self.opts.target_bufnr, true, self.win_config)
+function Popup:open(enter)
+  if enter == nil then
+    enter = true
+  end
+  self.winid = api.nvim_open_win(self.opts.target_bufnr, enter, self.win_config)
   if self.winid == 0 then
     self.winid = nil
     vim.notify("Overlook: Failed to open popup window.", vim.log.levels.ERROR)
@@ -157,8 +168,11 @@ function Popup:open()
   end
 
   local ok, err = pcall(function()
-    vim.w.is_overlook_popup = true
-    vim.w.overlook_popup = { root_winid = self.root_winid }
+    -- Set the popup's window-local marker vars directly on its winid rather than
+    -- via vim.w (current window). This way they are set correctly even when we
+    -- did NOT enter the window (enter=false), which restore_all relies on.
+    api.nvim_win_set_var(self.winid, "is_overlook_popup", true)
+    api.nvim_win_set_var(self.winid, "overlook_popup", { root_winid = self.root_winid })
     State.register_overlook_popup(self.winid, self.opts.target_bufnr)
     local actual = api.nvim_win_get_config(self.winid)
     self.width = actual.width

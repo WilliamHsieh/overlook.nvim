@@ -164,41 +164,70 @@ function Window:on_popup_closed(winid)
   end)
 end
 
----Restore the most recently closed popup.
-function Window:restore()
-  local Popup = require("overlook.popup")
+---Restore the most-recently-trashed popup. Internal helper shared by restore()
+---and restore_all(). `enter` controls whether the new popup grabs focus.
+---@param enter boolean
+---@return OverlookPopup? restored, boolean had_trash
+function Window:restore_one(enter)
   local data = self.stack:peek_trash()
   if not data then
-    vim.notify("Overlook: No popup to restore", vim.log.levels.WARN)
-    return
+    return nil, false
   end
 
+  local Popup = require("overlook.popup")
   local ctx = {
     root_winid = self.winid,
     prev = self.stack:top(),
     depth = self.stack:size(),
   }
   local restored = Popup.new(data.opts, ctx)
-  if not restored or not restored:open() then
-    vim.notify("Overlook: Failed to restore popup", vim.log.levels.ERROR)
-    return -- trash untouched on failure
+  if not restored or not restored:open(enter) then
+    return nil, true -- had trash, but the reopen failed
   end
 
   self.stack:pop_trash()
   self.stack:restore_item(restored)
+  return restored, true
+end
+
+---Restore the most recently closed popup and focus it.
+function Window:restore()
+  local restored, had_trash = self:restore_one(true)
+  if not had_trash then
+    vim.notify("Overlook: No popup to restore", vim.log.levels.WARN)
+  elseif not restored then
+    vim.notify("Overlook: Failed to restore popup", vim.log.levels.ERROR)
+  end
 end
 
 ---Restore all previously closed popups in this Window's stack.
+---Each popup opens WITHOUT grabbing focus (enter=false), so focus never moves
+---through the intermediate popups -- no WinEnter/WinLeave/WinClosed fires for
+---them, and a focus-driven autocmd (e.g. auto-close-float-on-WinLeave) cannot
+---perturb the chain mid-restore. Only after every popup is recreated do we
+---focus the top one and refresh the keymap, once.
 function Window:restore_all()
+  local restored_any = false
   while true do
-    local before = self.stack:peek_trash()
-    if not before then
-      return
+    local restored, had_trash = self:restore_one(false)
+    if not had_trash then
+      break -- trash empty; done
     end
-    self:restore()
-    if self.stack:peek_trash() == before then
-      break -- restore failed; top of trash unchanged. stop.
+    if not restored then
+      vim.notify("Overlook: Failed to restore popup", vim.log.levels.ERROR)
+      break -- reopen failed; stop
     end
+    restored_any = true
+  end
+
+  if restored_any then
+    local top = self.stack:top()
+    if top then
+      top:focus()
+    end
+    vim.schedule(function()
+      require("overlook.state").update_keymap()
+    end)
   end
 end
 
