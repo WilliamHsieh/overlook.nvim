@@ -389,3 +389,69 @@ describe("Window:restore focuses the restored popup", function()
     w:close_all()
   end)
 end)
+
+describe("Popup:open(false) opens without taking focus", function()
+  local Popup = require("overlook.popup")
+
+  before_each(function()
+    require("overlook.window").instances = {}
+    vim.w = {}
+  end)
+
+  it("leaves focus on the host but still marks the popup window", function()
+    local host = api.nvim_get_current_win()
+    local p = Popup.new({ target_bufnr = make_buf(), lnum = 1, col = 1 }, { root_winid = host, prev = nil, depth = 0 })
+    assert.is_not_nil(p)
+
+    local ok = p:open(false)
+
+    assert.is_true(ok)
+    assert.is_true(p:is_valid())
+    assert.are.equal(host, api.nvim_get_current_win()) -- focus did NOT move to the popup
+    assert.is_true(api.nvim_win_get_var(p.winid, "is_overlook_popup"))
+    assert.are.equal(host, api.nvim_win_get_var(p.winid, "overlook_popup").root_winid)
+
+    p:close()
+  end)
+end)
+
+describe("Window:restore_all does not move focus through the popups", function()
+  local Window = require("overlook.window")
+
+  before_each(function()
+    Window.instances = {}
+    vim.w = {}
+  end)
+
+  it("fires WinEnter at most once (final settle), not once per restored popup", function()
+    local w = Window.current()
+    w:open_popup { target_bufnr = make_buf(), lnum = 1, col = 1 }
+    w:open_popup { target_bufnr = make_buf(), lnum = 1, col = 1 }
+    w:open_popup { target_bufnr = make_buf(), lnum = 1, col = 1 }
+    w:close_all()
+    assert.are.equal(3, #w.stack.trash)
+
+    local win_enter = 0
+    local grp = api.nvim_create_augroup("OverlookTestRestoreFocus", { clear = true })
+    api.nvim_create_autocmd("WinEnter", {
+      group = grp,
+      callback = function()
+        win_enter = win_enter + 1
+      end,
+    })
+
+    w:restore_all()
+
+    api.nvim_del_augroup_by_id(grp)
+
+    assert.are.equal(3, w.stack:size())
+    assert_invariant(w)
+    -- enter=true would fire WinEnter once per popup (3x); enter=false keeps focus
+    -- on the host and only the single final settle focus fires it.
+    assert.is_true(win_enter <= 1, "WinEnter fired " .. win_enter .. " times during restore_all; expected <= 1")
+    -- focus ends on the top popup
+    assert.are.equal(w.stack:top().winid, api.nvim_get_current_win())
+
+    w:close_all()
+  end)
+end)

@@ -149,13 +149,19 @@ function Popup:determine_window_configuration(ctx)
   return true
 end
 
----Open the float, entering it (focus moves to the new popup), matching how
----peek and restore behave on master so focus-reactive plugins manage popups
----consistently. Internal rollback: if post-open setup throws, close the
----half-created window and return false. Caller (Window) checks the return.
+---Open the float. `enter` controls whether focus moves to the new popup
+---(default true; peek uses this). Pass false to open WITHOUT moving focus --
+---restore_all uses that so overlook's own restore never lands focus on a split
+---mid-operation and wakes a focus-reactive plugin (e.g. focus.nvim resizing the
+---host out from under the popups). Internal rollback: if post-open setup throws,
+---close the half-created window and return false.
+---@param enter? boolean
 ---@return boolean ok
-function Popup:open()
-  self.winid = api.nvim_open_win(self.opts.target_bufnr, true, self.win_config)
+function Popup:open(enter)
+  if enter == nil then
+    enter = true
+  end
+  self.winid = api.nvim_open_win(self.opts.target_bufnr, enter, self.win_config)
   if self.winid == 0 then
     self.winid = nil
     vim.notify("Overlook: Failed to open popup window.", vim.log.levels.ERROR)
