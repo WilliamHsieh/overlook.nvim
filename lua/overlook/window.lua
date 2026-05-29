@@ -165,10 +165,11 @@ function Window:on_popup_closed(winid)
 end
 
 ---Restore the most-recently-trashed popup. Internal helper shared by restore()
----and restore_all(). `enter` controls whether the new popup grabs focus.
----@param enter boolean
+---and restore_all(). The popup is reopened entering it (enter=true) exactly as
+---master does, so focus-reactive float plugins manage restored popups the same
+---way they manage freshly-peeked ones.
 ---@return OverlookPopup? restored, boolean had_trash
-function Window:restore_one(enter)
+function Window:restore_one()
   local data = self.stack:peek_trash()
   if not data then
     return nil, false
@@ -181,7 +182,7 @@ function Window:restore_one(enter)
     depth = self.stack:size(),
   }
   local restored = Popup.new(data.opts, ctx)
-  if not restored or not restored:open(enter) then
+  if not restored or not restored:open() then
     return nil, true -- had trash, but the reopen failed
   end
 
@@ -190,9 +191,9 @@ function Window:restore_one(enter)
   return restored, true
 end
 
----Restore the most recently closed popup and focus it.
+---Restore the most recently closed popup.
 function Window:restore()
-  local restored, had_trash = self:restore_one(true)
+  local restored, had_trash = self:restore_one()
   if not had_trash then
     vim.notify("Overlook: No popup to restore", vim.log.levels.WARN)
   elseif not restored then
@@ -200,34 +201,22 @@ function Window:restore()
   end
 end
 
----Restore all previously closed popups in this Window's stack.
----Each popup opens WITHOUT grabbing focus (enter=false), so focus never moves
----through the intermediate popups -- no WinEnter/WinLeave/WinClosed fires for
----them, and a focus-driven autocmd (e.g. auto-close-float-on-WinLeave) cannot
----perturb the chain mid-restore. Only after every popup is recreated do we
----focus the top one and refresh the keymap, once.
+---Restore all previously closed popups in this Window's stack, mirroring
+---master: each popup is reopened (entering it) in turn. Entering each popup is
+---deliberate -- it lets focus-reactive plugins (e.g. an auto-close-float
+---autocmd) manage the restored popups identically to how master does, instead
+---of bypassing them. (The failure guard below also avoids master's latent
+---infinite loop when a reopen fails.)
 function Window:restore_all()
-  local restored_any = false
   while true do
-    local restored, had_trash = self:restore_one(false)
-    if not had_trash then
+    local before = self.stack:peek_trash()
+    if not before then
       break -- trash empty; done
     end
-    if not restored then
-      vim.notify("Overlook: Failed to restore popup", vim.log.levels.ERROR)
-      break -- reopen failed; stop
+    self:restore_one()
+    if self.stack:peek_trash() == before then
+      break -- reopen failed; top of trash unchanged. stop.
     end
-    restored_any = true
-  end
-
-  if restored_any then
-    local top = self.stack:top()
-    if top then
-      top:focus()
-    end
-    vim.schedule(function()
-      require("overlook.state").update_keymap()
-    end)
   end
 end
 

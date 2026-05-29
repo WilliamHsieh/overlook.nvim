@@ -361,7 +361,7 @@ describe("Window:restore focuses the restored popup", function()
 
   it("leaves focus on the restored popup (single restore)", function()
     local w = Window.current()
-    w:open_popup({ target_bufnr = make_buf(), lnum = 1, col = 1 })
+    w:open_popup { target_bufnr = make_buf(), lnum = 1, col = 1 }
     w:close_all()
     assert.are.equal(1, #w.stack.trash)
 
@@ -376,9 +376,9 @@ describe("Window:restore focuses the restored popup", function()
 
   it("ends with focus on the top popup after restore_all", function()
     local w = Window.current()
-    w:open_popup({ target_bufnr = make_buf(), lnum = 1, col = 1 })
-    w:open_popup({ target_bufnr = make_buf(), lnum = 1, col = 1 })
-    w:open_popup({ target_bufnr = make_buf(), lnum = 1, col = 1 })
+    w:open_popup { target_bufnr = make_buf(), lnum = 1, col = 1 }
+    w:open_popup { target_bufnr = make_buf(), lnum = 1, col = 1 }
+    w:open_popup { target_bufnr = make_buf(), lnum = 1, col = 1 }
     w:close_all()
 
     w:restore_all()
@@ -386,129 +386,6 @@ describe("Window:restore focuses the restored popup", function()
     assert.are.equal(3, w.stack:size())
     assert.are.equal(w.stack:top().winid, api.nvim_get_current_win())
     assert_invariant(w)
-    w:close_all()
-  end)
-end)
-
-describe("Window:restore_all does not thrash focus", function()
-  local Window = require("overlook.window")
-
-  before_each(function()
-    Window.instances = {}
-    vim.w = {}
-  end)
-
-  it("fires WinEnter once (final settle), not once per restored popup", function()
-    local w = Window.current()
-    w:open_popup({ target_bufnr = make_buf(), lnum = 1, col = 1 })
-    w:open_popup({ target_bufnr = make_buf(), lnum = 1, col = 1 })
-    w:open_popup({ target_bufnr = make_buf(), lnum = 1, col = 1 })
-    w:close_all()
-    assert.are.equal(3, #w.stack.trash)
-
-    -- Count WinEnter events fired during the bulk restore.
-    local win_enter_count = 0
-    local grp = api.nvim_create_augroup("OverlookTestRestoreAll", { clear = true })
-    api.nvim_create_autocmd("WinEnter", {
-      group = grp,
-      callback = function()
-        win_enter_count = win_enter_count + 1
-      end,
-    })
-
-    w:restore_all()
-
-    api.nvim_del_augroup_by_id(grp)
-
-    assert.are.equal(3, w.stack:size())
-    assert_invariant(w)
-    -- With enter=true, opening 3 popups fires WinEnter 3x. With enter=false the
-    -- popups open unfocused, so only the single final settle focus fires it.
-    assert.is_true(
-      win_enter_count <= 1,
-      "WinEnter fired " .. win_enter_count .. " times during restore_all; expected <= 1"
-    )
-
-    w:close_all()
-  end)
-end)
-
-describe("Popup:open(false) opens without taking focus", function()
-  local Popup = require("overlook.popup")
-
-  before_each(function()
-    require("overlook.window").instances = {}
-    vim.w = {}
-  end)
-
-  it("leaves focus on the original window but still marks the popup", function()
-    local host = api.nvim_get_current_win()
-    local p = Popup.new(
-      { target_bufnr = make_buf(), lnum = 1, col = 1 },
-      { root_winid = host, prev = nil, depth = 0 }
-    )
-    assert.is_not_nil(p)
-
-    local ok = p:open(false)
-
-    assert.is_true(ok)
-    assert.is_true(p:is_valid())
-    -- focus must NOT have moved to the popup
-    assert.are.equal(host, api.nvim_get_current_win())
-    -- but the window-local markers are still set on the popup's own window
-    assert.is_true(api.nvim_win_get_var(p.winid, "is_overlook_popup"))
-    assert.are.equal(host, api.nvim_win_get_var(p.winid, "overlook_popup").root_winid)
-
-    p:close()
-  end)
-end)
-
-describe("Window:restore_all survives an auto-close-float autocmd", function()
-  local Window = require("overlook.window")
-  local grp
-
-  before_each(function()
-    Window.instances = {}
-    vim.w = {}
-    -- Simulate a common plugin/config pattern: synchronously close a floating
-    -- window the moment focus leaves it. With enter=true restore this would
-    -- destroy each popup as the next one opens; enter=false must survive it.
-    grp = api.nvim_create_augroup("OverlookTestAutoClose", { clear = true })
-    api.nvim_create_autocmd("WinLeave", {
-      group = grp,
-      callback = function()
-        local cur = api.nvim_get_current_win()
-        if api.nvim_win_get_config(cur).relative ~= "" then
-          pcall(api.nvim_win_close, cur, false)
-        end
-      end,
-    })
-  end)
-
-  after_each(function()
-    pcall(api.nvim_del_augroup_by_id, grp)
-  end)
-
-  it("restores every popup, correctly anchored, despite focus-loss auto-close", function()
-    local root = api.nvim_get_current_win()
-    local w = Window.current()
-    w:open_popup({ target_bufnr = make_buf(), lnum = 1, col = 1 })
-    w:open_popup({ target_bufnr = make_buf(), lnum = 1, col = 1 })
-    w:open_popup({ target_bufnr = make_buf(), lnum = 1, col = 1 })
-    w:close_all()
-    assert.are.equal(3, #w.stack.trash)
-
-    w:restore_all()
-
-    -- All three survive (enter=false means WinLeave never fires for them).
-    assert.are.equal(3, w.stack:size())
-    assert_invariant(w)
-    -- Bottom anchors to the host; the rest chain off the previous popup.
-    assert.are.equal(root, api.nvim_win_get_config(w.stack.items[1].winid).win)
-    for i = 2, 3 do
-      assert.are.equal(w.stack.items[i - 1].winid, api.nvim_win_get_config(w.stack.items[i].winid).win)
-    end
-
     w:close_all()
   end)
 end)

@@ -149,18 +149,13 @@ function Popup:determine_window_configuration(ctx)
   return true
 end
 
----Open the float. `enter` controls whether focus moves to the new popup
----(default true). Pass false to open without stealing focus -- used by
----restore_all so focus never moves through the intermediate popups.
----Internal rollback: if post-open setup throws, close the half-created window
----and return false. Caller (Window) checks the return.
----@param enter? boolean
+---Open the float, entering it (focus moves to the new popup), matching how
+---peek and restore behave on master so focus-reactive plugins manage popups
+---consistently. Internal rollback: if post-open setup throws, close the
+---half-created window and return false. Caller (Window) checks the return.
 ---@return boolean ok
-function Popup:open(enter)
-  if enter == nil then
-    enter = true
-  end
-  self.winid = api.nvim_open_win(self.opts.target_bufnr, enter, self.win_config)
+function Popup:open()
+  self.winid = api.nvim_open_win(self.opts.target_bufnr, true, self.win_config)
   if self.winid == 0 then
     self.winid = nil
     vim.notify("Overlook: Failed to open popup window.", vim.log.levels.ERROR)
@@ -168,9 +163,6 @@ function Popup:open(enter)
   end
 
   local ok, err = pcall(function()
-    -- Set the popup's window-local marker vars directly on its winid rather than
-    -- via vim.w (current window). This way they are set correctly even when we
-    -- did NOT enter the window (enter=false), which restore_all relies on.
     api.nvim_win_set_var(self.winid, "is_overlook_popup", true)
     api.nvim_win_set_var(self.winid, "overlook_popup", { root_winid = self.root_winid })
     State.register_overlook_popup(self.winid, self.opts.target_bufnr)
