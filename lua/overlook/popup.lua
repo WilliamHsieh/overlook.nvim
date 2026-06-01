@@ -50,6 +50,12 @@ function M.new(opts, ctx)
     this.is_first_popup = ctx.prev == nil
     local cfg = vim.deepcopy(ctx.win_config)
     cfg.win = ctx.prev and ctx.prev.winid or ctx.root_winid
+    -- Recompute title from the target buffer; state.update_title rewrites the
+    -- live popup's title via nvim_win_set_config but never writes it back into
+    -- popup.win_config, so reusing ctx.win_config.title verbatim shows the
+    -- adapter's original (now-stale) title.
+    local buf_name = api.nvim_buf_get_name(opts.target_bufnr)
+    cfg.title = (buf_name and buf_name ~= "") and vim.fn.fnamemodify(buf_name, ":~:.") or "(No Name)"
     this.win_config = cfg
   elseif not this:determine_window_configuration(ctx) then
     return nil
@@ -169,11 +175,14 @@ function Popup:determine_window_configuration(ctx)
 end
 
 ---Open the float. `enter` controls whether focus moves to the new popup
----(default true; peek uses this). Pass false to open WITHOUT moving focus --
----restore_all uses that so overlook's own restore never lands focus on a split
----mid-operation and wakes a focus-reactive plugin (e.g. focus.nvim resizing the
----host out from under the popups). Internal rollback: if post-open setup throws,
----close the half-created window and return false.
+---(default true; both peek and restore_all use this). restore_all relies on
+---enter=true because nvim's relative="win" float-layout pass only fires on the
+---focus-change side effect; opening with enter=false leaves the float stuck at
+---the anchor's transient position at the instant of nvim_open_win. restore_all
+---suppresses focus-reactive plugins via eventignore around the loop instead,
+---and yields a redraw between iterations so the layout settles before the next
+---anchor is read. Internal rollback: if post-open setup throws, close the
+---half-created window and return false.
 ---@param enter? boolean
 ---@return boolean ok
 function Popup:open(enter)
@@ -209,10 +218,9 @@ function Popup:open(enter)
   return true
 end
 
----@param force? boolean
-function Popup:close(force)
+function Popup:close()
   if self:is_valid() then
-    pcall(api.nvim_win_close, self.winid, force or false)
+    pcall(api.nvim_win_close, self.winid, false)
   end
 end
 

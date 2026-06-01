@@ -499,8 +499,10 @@ describe("Window:restore_all does not move focus through the popups", function()
 
     assert.are.equal(3, w.stack:size())
     assert_invariant(w)
-    -- enter=true would fire WinEnter once per popup (3x); enter=false keeps focus
-    -- on the host and only the single final settle focus fires it.
+    -- restore_all uses enter=true on every iteration (the float-layout pass
+    -- requires it); WinEnter is kept from firing because the loop is wrapped in
+    -- eventignore for Win/Buf Enter/Leave. The single permissible WinEnter is
+    -- the final top:focus() outside the eventignore window.
     assert.is_true(win_enter <= 1, "WinEnter fired " .. win_enter .. " times during restore_all; expected <= 1")
     -- focus ends on the top popup
     assert.are.equal(w.stack:top().winid, api.nvim_get_current_win())

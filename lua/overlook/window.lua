@@ -111,15 +111,14 @@ end
 ---reconciliation, and Win/Buf Enter/Leave so the transient focus Neovim assigns
 ---while closing (often a neighbouring split) doesn't wake a focus-reactive plugin
 ---(e.g. focus.nvim resizing the host). Focus is then set deliberately to the host.
----@param force? boolean
-function Window:close_all(force)
+function Window:close_all()
   local ignored = { "WinClosed", "WinEnter", "WinLeave", "BufEnter", "BufWinEnter" }
   vim.opt.eventignore:append(ignored)
 
   while not self.stack:empty() do
     local top = self.stack:top()
     if top then
-      top:close(force)
+      top:close()
     end
     self.stack:pop()
   end

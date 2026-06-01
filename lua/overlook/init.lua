@@ -10,6 +10,7 @@ local function setup_autocmd()
     callback = function(args)
       local winid = tonumber(args.match)
       if not winid then
+        vim.notify("Overlook: Invalid winid in WinClosed autocmd", vim.log.levels.ERROR)
         return
       end
       local w = require("overlook.window").find_by_popup_winid(winid)

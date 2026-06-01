@@ -39,6 +39,58 @@ local Popup = require("overlook.popup")
 local Stack = require("overlook.stack")
 local State = require("overlook.state")
 
+-- Border resolution must be tested BEFORE any describe in this file mocks
+-- vim.api -- mock(vim.api, true) stubs nvim_get_option_value, which
+-- vim.o.winborder reads through, so once any other describe runs, reading
+-- the option returns nil even after mock.revert. Placed here to keep the
+-- real vim.api/vim.o intact.
+describe("Popup -- border resolution fallback chain", function()
+  -- determine_window_configuration picks the border in this order:
+  --   Config.ui.border (if non-empty)
+  --   vim.o.winborder  (if non-empty)
+  --   "rounded"        (final default)
+  local original_winborder
+  local function make_real_buf()
+    local b = vim.api.nvim_create_buf(false, true)
+    vim.api.nvim_buf_set_lines(b, 0, -1, false, { "line" })
+    return b
+  end
+
+  before_each(function()
+    global_mock_config_module.reset_to_initial_state()
+    original_winborder = vim.o.winborder
+  end)
+
+  after_each(function()
+    global_mock_config_module.reset_to_initial_state()
+    vim.o.winborder = original_winborder
+  end)
+
+  it("uses Config.ui.border when it is set", function()
+    global_mock_config_module.options.ui.border = "double"
+    vim.o.winborder = "single" -- should be ignored
+    local p = Popup.new { target_bufnr = make_real_buf(), lnum = 1, col = 1 }
+    assert.is_not_nil(p)
+    assert.are.equal("double", p.win_config.border)
+  end)
+
+  it("falls back to vim.o.winborder when Config.ui.border is empty", function()
+    global_mock_config_module.options.ui.border = ""
+    vim.o.winborder = "single"
+    local p = Popup.new { target_bufnr = make_real_buf(), lnum = 1, col = 1 }
+    assert.is_not_nil(p)
+    assert.are.equal("single", p.win_config.border)
+  end)
+
+  it("falls back to 'rounded' when both Config.ui.border and vim.o.winborder are empty", function()
+    global_mock_config_module.options.ui.border = ""
+    vim.o.winborder = ""
+    local p = Popup.new { target_bufnr = make_real_buf(), lnum = 1, col = 1 }
+    assert.is_not_nil(p)
+    assert.are.equal("rounded", p.win_config.border)
+  end)
+end)
+
 -- Test constants
 local TEST_CONSTANTS = {
   DEFAULT_WINID = 1000,
