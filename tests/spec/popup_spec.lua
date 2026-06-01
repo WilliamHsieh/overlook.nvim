@@ -4,6 +4,14 @@
 local mock = require("luassert.mock")
 local stub = require("luassert.stub")
 
+-- Pre-load vim.log so its first access doesn't lazy-load through vim._load_package
+-- while vim.api is mocked. mock(vim.api, true) in the describes below stubs
+-- nvim__get_runtime (the loader's runtime-file lookup), which would otherwise
+-- crash on Neovim nightly at vim/_init_packages:20 (`#found > 0` on a nil),
+-- because vim.log is fully lazy there. Stable v0.11.1 caches it during startup
+-- so this is invisible until CI runs the nightly job.
+local _ = vim.log.levels
+
 -- Mock for "overlook.config"
 -- This needs to be at the top before "overlook.popup" is required by the tests.
 local initial_mock_ui_config_table = {
