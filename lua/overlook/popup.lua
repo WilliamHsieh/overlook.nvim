@@ -32,7 +32,26 @@ function M.new(opts, ctx)
     return nil
   end
 
-  if not this:determine_window_configuration(ctx) then
+  if ctx.win_config then
+    -- Restore path: reuse the popup's original window config so it returns to
+    -- exactly where it was, instead of recomputing from the now-current cursor
+    -- (which may have drifted since the popup was closed). Only the anchor window
+    -- is re-pointed -- to the current host for the first popup, or the freshly
+    -- restored previous popup for a stacked one.
+    if not api.nvim_win_is_valid(ctx.root_winid) then
+      vim.notify("Overlook: cannot restore popup, root window is invalid", vim.log.levels.ERROR)
+      return nil
+    end
+    if ctx.prev and not api.nvim_win_is_valid(ctx.prev.winid) then
+      vim.notify("Overlook: cannot restore popup, previous popup in chain is invalid", vim.log.levels.ERROR)
+      return nil
+    end
+    this.root_winid = ctx.root_winid
+    this.is_first_popup = ctx.prev == nil
+    local cfg = vim.deepcopy(ctx.win_config)
+    cfg.win = ctx.prev and ctx.prev.winid or ctx.root_winid
+    this.win_config = cfg
+  elseif not this:determine_window_configuration(ctx) then
     return nil
   end
 

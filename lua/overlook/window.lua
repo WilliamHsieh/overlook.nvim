@@ -182,6 +182,7 @@ function Window:restore_one(enter)
     root_winid = self.winid,
     prev = self.stack:top(),
     depth = self.stack:size(),
+    win_config = data.win_config, -- reuse the closed popup's original placement
   }
   local restored = Popup.new(data.opts, ctx)
   if not restored or not restored:open(enter) then
@@ -203,23 +204,51 @@ function Window:restore()
   end
 end
 
----Restore all previously closed popups, reopening each WITHOUT moving focus
----(enter=false) so overlook's own restore never lands focus on a split and wakes
----a focus-reactive plugin (e.g. focus.nvim) into resizing the host out from under
----the popups. Focus stays on the host throughout; only at the end do we focus the
----top popup (a float, which such plugins skip) and refresh the keymap once.
+---Restore all previously closed popups. Each is reopened with enter=true so
+---nvim runs the layout pass that anchors a relative="win" float against the
+---host's CURRENT position -- with enter=false, the layout pass is skipped and
+---the float gets stuck at whatever transient anchor position existed at the
+---instant of nvim_open_win. To keep focus-reactive plugins (focus.nvim, etc.)
+---from observing the transient focus walk across the restored popups, the loop
+---is wrapped in eventignore for Win/Buf Enter/Leave. focus.nvim wouldn't react
+---to floats anyway (it skips relative != "") but other plugins may; this is
+---defense in depth. Focus ends on the top popup (the last enter=true).
 function Window:restore_all()
+  -- WinClosed is included so a stray close fired during the redraw between
+  -- iterations can't prune the just-restored prev out from under the next
+  -- iteration's anchor.
+  local ignored = { "WinEnter", "WinLeave", "BufEnter", "BufWinEnter", "WinClosed" }
+  vim.opt.eventignore:append(ignored)
+
   local restored_any = false
-  while true do
-    local before = self.stack:peek_trash()
-    if not before then
-      break -- trash empty; done
+  local ok, err = pcall(function()
+    while true do
+      local before = self.stack:peek_trash()
+      if not before then
+        return -- trash empty; done
+      end
+      self:restore_one(true)
+      if self.stack:peek_trash() == before then
+        return -- reopen failed; top of trash unchanged. stop.
+      end
+      restored_any = true
+      -- Yield to the layout pass so the float we just opened settles its screen
+      -- position before the next iteration reads it as an anchor. Interactive
+      -- peek never hits this because each peek runs in its own event-loop tick;
+      -- restore_all does all opens in one synchronous burst, so without this
+      -- redraw nvim sees an anchor at its provisional (origin-ish) position and
+      -- the chain collapses from depth 3 onward.
+      vim.cmd.redraw()
     end
-    self:restore_one(false)
-    if self.stack:peek_trash() == before then
-      break -- reopen failed; top of trash unchanged. stop.
-    end
-    restored_any = true
+  end)
+
+  -- Always restore eventignore, even if the loop errored. Otherwise a single
+  -- failure leaves Win/Buf Enter/Leave globally suppressed for the rest of the
+  -- session, silently breaking focus.nvim and any other reactive plugin.
+  vim.opt.eventignore:remove(ignored)
+
+  if not ok then
+    vim.notify("Overlook: restore_all error: " .. tostring(err), vim.log.levels.ERROR)
   end
 
   if restored_any then

@@ -540,8 +540,8 @@ describe("Popup — lifecycle methods", function()
     api_mock.nvim_get_current_win.returns(7777) -- focus is elsewhere
     -- nvim_win_get_cursor must be called on root_winid (100), not 7777:
     api_mock.nvim_win_get_cursor = stub()
-    api_mock.nvim_win_get_cursor.on_call_with(100).returns({ 5, 10 })
-    api_mock.nvim_win_get_cursor.on_call_with(7777).returns({ 99, 99 }) -- if used, popup would mispoint
+    api_mock.nvim_win_get_cursor.on_call_with(100).returns { 5, 10 }
+    api_mock.nvim_win_get_cursor.on_call_with(7777).returns { 99, 99 } -- if used, popup would mispoint
 
     local Popup = require("overlook.popup")
     local p = Popup.new({ target_bufnr = 1, lnum = 1, col = 1 }, { root_winid = 100, prev = nil, depth = 0 })
