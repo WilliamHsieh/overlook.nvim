@@ -116,11 +116,7 @@ describe("Window:open_popup — happy path", function()
       positions[i] = api.nvim_win_get_position(p.winid)
     end
     for i = 2, #positions do
-      assert.are_not.same(
-        positions[i - 1],
-        positions[i],
-        string.format("popup %d collapsed onto popup %d", i, i - 1)
-      )
+      assert.are_not.same(positions[i - 1], positions[i], string.format("popup %d collapsed onto popup %d", i, i - 1))
     end
 
     w:close_all()
