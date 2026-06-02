@@ -90,6 +90,41 @@ describe("Window:open_popup — happy path", function()
     assert.are.equal(p3, w.stack:top())
     w:close_all()
   end)
+
+  -- Regression: peek depth-5 collapse. Opening many popups in a tight loop
+  -- (no event-loop tick between opens) used to leave deep-chain popups
+  -- anchored to a still-provisional parent, collapsing them near the editor
+  -- origin. Window:_spawn_popup now calls vim.cmd.redraw() after popup:open
+  -- so each anchor is settled before the next iteration reads it.
+  it("chain at depth 6 does not collapse (popups form a staircase)", function()
+    local host = api.nvim_get_current_win()
+    api.nvim_buf_set_lines(api.nvim_win_get_buf(host), 0, -1, false, { string.rep("x", 120) })
+    api.nvim_win_set_cursor(host, { 1, 10 })
+
+    local w = Window.current()
+    for i = 1, 6 do
+      w:open_popup { target_bufnr = make_buf(), lnum = 1, col = 1, title = tostring(i) }
+    end
+    assert.are.equal(6, w.stack:size())
+    assert_invariant(w)
+
+    -- Each popup must land at a distinct screen position from the previous
+    -- one. If the layout cascade failed to resolve mid-loop, popups 2+ would
+    -- collapse onto popup 1's position (or near the origin).
+    local positions = {}
+    for i, p in ipairs(w.stack.items) do
+      positions[i] = api.nvim_win_get_position(p.winid)
+    end
+    for i = 2, #positions do
+      assert.are_not.same(
+        positions[i - 1],
+        positions[i],
+        string.format("popup %d collapsed onto popup %d", i, i - 1)
+      )
+    end
+
+    w:close_all()
+  end)
 end)
 
 describe("Window:open_popup — rollback", function()

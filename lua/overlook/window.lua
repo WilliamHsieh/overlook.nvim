@@ -65,6 +65,14 @@ function Window:_spawn_popup(opts, enter)
   if not popup:open(enter) then
     return nil
   end
+  -- Force the float-layout pass to settle before returning. Without this, a
+  -- subsequent popup that anchors to this one (whether the next iteration of
+  -- restore_all's loop or the user's next peek_cursor keystroke deep in the
+  -- chain) can read this popup's position as still-provisional and collapse
+  -- near the editor origin. Restore_all is the same bug at scale; interactive
+  -- peek hits it at depth 5+ in busy configs. Cheap; nvim was going to redraw
+  -- on idle anyway.
+  vim.cmd.redraw()
   return popup
 end
 
@@ -242,13 +250,9 @@ function Window:restore_all()
         return -- reopen failed; top of trash unchanged. stop.
       end
       restored_any = true
-      -- Yield to the layout pass so the float we just opened settles its screen
-      -- position before the next iteration reads it as an anchor. Interactive
-      -- peek never hits this because each peek runs in its own event-loop tick;
-      -- restore_all does all opens in one synchronous burst, so without this
-      -- redraw nvim sees an anchor at its provisional (origin-ish) position and
-      -- the chain collapses from depth 3 onward.
-      vim.cmd.redraw()
+      -- Layout-settle redraw happens inside Window:_spawn_popup (called by
+      -- restore_one) so each restored popup's position is resolved before the
+      -- next iteration anchors to it.
     end
   end)
 
