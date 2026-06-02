@@ -330,6 +330,41 @@ describe("Window.find_by_popup_winid", function()
     assert.is_nil(Window.find_by_popup_winid(99999))
     w:close_all()
   end)
+
+  -- Lazy prune: M.instances accumulates one entry per host winid the user ever
+  -- peeked into. Without reaping, find_by_popup_winid's scan grows unbounded
+  -- over a long session. The function now drops entries whose host winid is
+  -- invalid AND whose stack + trash are both empty.
+  it("reaps stale Window entries whose host is invalid with empty stack and trash", function()
+    -- 9999 is not a real winid; Window.get creates an entry regardless.
+    local stale = Window.get(9999)
+    assert.are.equal(stale, Window.instances[9999])
+
+    Window.find_by_popup_winid(0) -- any winid; trigger the scan
+
+    assert.is_nil(Window.instances[9999])
+  end)
+
+  it("keeps stale-host Window entries that still hold popups (live or trashed)", function()
+    -- Stale host, but stack has a live popup -> must NOT be reaped (otherwise
+    -- the live popup would have no Window to dispatch on_popup_closed to).
+    local with_items = Window.get(9998)
+    table.insert(with_items.stack.items, { winid = 100 })
+
+    -- Stale host, empty stack but non-empty trash -> must NOT be reaped (user
+    -- could still restore_all those popups).
+    local with_trash = Window.get(9997)
+    table.insert(with_trash.stack.trash, { winid = 200 })
+
+    Window.find_by_popup_winid(0)
+
+    assert.is_not_nil(Window.instances[9998])
+    assert.is_not_nil(Window.instances[9997])
+
+    -- Cleanup so subsequent tests don't see these fakes.
+    with_items.stack.items = {}
+    with_trash.stack.trash = {}
+  end)
 end)
 
 describe("init.lua WinClosed integration", function()

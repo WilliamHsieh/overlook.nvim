@@ -318,14 +318,21 @@ end
 
 ---Scan all hosts for a popup with this winid. Used by the WinClosed autocmd.
 ---Iterates every position in every stack (not just tops) because non-top popups
----can close (see spec §5).
+---can close (see spec §5). Reaps stale Window entries (host winid invalid AND
+---both stack and trash empty) as a side effect so M.instances stays bounded
+---over long sessions instead of growing one entry per host the user ever
+---peeked into.
 ---@param winid integer
 ---@return OverlookWindow?
 function M.find_by_popup_winid(winid)
-  for _, w in pairs(M.instances) do
-    for _, item in ipairs(w.stack.items) do
-      if item.winid == winid then
-        return w
+  for host_winid, w in pairs(M.instances) do
+    if not api.nvim_win_is_valid(host_winid) and #w.stack.items == 0 and #w.stack.trash == 0 then
+      M.instances[host_winid] = nil
+    else
+      for _, item in ipairs(w.stack.items) do
+        if item.winid == winid then
+          return w
+        end
       end
     end
   end
