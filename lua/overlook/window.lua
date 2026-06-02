@@ -43,13 +43,15 @@ function M.current()
   return M.get(winid)
 end
 
----Creates and pushes a popup onto this Window's stack. Behavior matches the
----deleted ui.create_popup. The receiver `self` corresponds to the host
----window resolved by the caller (typically `Window.current()`), which is the
----same root window Popup.new derives `popup.root_winid` from.
+---Construct + open a popup using this Window's current context (host, top
+---of stack as prev, current depth). Returns the popup on success, nil on
+---failure. Shared between open_popup (push semantics) and restore_one
+---(trash/restore_item semantics); the only difference between the two paths
+---is the stack action, not the construction.
 ---@param opts OverlookPopupOptions
+---@param enter? boolean  passed through to Popup:open
 ---@return OverlookPopup?
-function Window:open_popup(opts)
+function Window:_spawn_popup(opts, enter)
   local Popup = require("overlook.popup")
   local ctx = {
     root_winid = self.winid,
@@ -60,10 +62,23 @@ function Window:open_popup(opts)
   if not popup then
     return nil
   end
-  if not popup:open() then
+  if not popup:open(enter) then
     return nil
   end
-  self.stack:push(popup)
+  return popup
+end
+
+---Creates and pushes a popup onto this Window's stack. Behavior matches the
+---deleted ui.create_popup. The receiver `self` corresponds to the host
+---window resolved by the caller (typically `Window.current()`), which is the
+---same root window Popup.new derives `popup.root_winid` from.
+---@param opts OverlookPopupOptions
+---@return OverlookPopup?
+function Window:open_popup(opts)
+  local popup = self:_spawn_popup(opts, true)
+  if popup then
+    self.stack:push(popup)
+  end
   return popup
 end
 
@@ -167,7 +182,10 @@ function Window:on_popup_closed(winid)
 end
 
 ---Restore the most-recently-trashed popup. Internal helper shared by restore()
----and restore_all(). `enter` controls whether the reopened popup grabs focus.
+---and restore_all(). Reopens at the host's CURRENT cursor (recomputed via
+---config_for_first_popup), same as a fresh peek -- consistent placement
+---semantics with open_popup. `enter` controls whether the reopened popup
+---grabs focus.
 ---@param enter boolean
 ---@return OverlookPopup? restored, boolean had_trash
 function Window:restore_one(enter)
@@ -176,15 +194,8 @@ function Window:restore_one(enter)
     return nil, false
   end
 
-  local Popup = require("overlook.popup")
-  local ctx = {
-    root_winid = self.winid,
-    prev = self.stack:top(),
-    depth = self.stack:size(),
-    win_config = data.win_config, -- reuse the closed popup's original placement
-  }
-  local restored = Popup.new(data.opts, ctx)
-  if not restored or not restored:open(enter) then
+  local restored = self:_spawn_popup(data.opts, enter)
+  if not restored then
     return nil, true -- had trash, but the reopen failed
   end
 

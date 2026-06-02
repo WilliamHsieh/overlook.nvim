@@ -32,32 +32,7 @@ function M.new(opts, ctx)
     return nil
   end
 
-  if ctx.win_config then
-    -- Restore path: reuse the popup's original window config so it returns to
-    -- exactly where it was, instead of recomputing from the now-current cursor
-    -- (which may have drifted since the popup was closed). Only the anchor window
-    -- is re-pointed -- to the current host for the first popup, or the freshly
-    -- restored previous popup for a stacked one.
-    if not api.nvim_win_is_valid(ctx.root_winid) then
-      vim.notify("Overlook: cannot restore popup, root window is invalid", vim.log.levels.ERROR)
-      return nil
-    end
-    if ctx.prev and not api.nvim_win_is_valid(ctx.prev.winid) then
-      vim.notify("Overlook: cannot restore popup, previous popup in chain is invalid", vim.log.levels.ERROR)
-      return nil
-    end
-    this.root_winid = ctx.root_winid
-    this.is_first_popup = ctx.prev == nil
-    local cfg = vim.deepcopy(ctx.win_config)
-    cfg.win = ctx.prev and ctx.prev.winid or ctx.root_winid
-    -- Recompute title from the target buffer; state.update_title rewrites the
-    -- live popup's title via nvim_win_set_config but never writes it back into
-    -- popup.win_config, so reusing ctx.win_config.title verbatim shows the
-    -- adapter's original (now-stale) title.
-    local buf_name = api.nvim_buf_get_name(opts.target_bufnr)
-    cfg.title = (buf_name and buf_name ~= "") and vim.fn.fnamemodify(buf_name, ":~:.") or "(No Name)"
-    this.win_config = cfg
-  elseif not this:determine_window_configuration(ctx) then
+  if not this:determine_window_configuration(ctx) then
     return nil
   end
 
@@ -144,6 +119,10 @@ end
 function Popup:determine_window_configuration(ctx)
   if not api.nvim_win_is_valid(ctx.root_winid) then
     vim.notify("Overlook: invalid root_winid in popup ctx", vim.log.levels.ERROR)
+    return false
+  end
+  if ctx.prev and not api.nvim_win_is_valid(ctx.prev.winid) then
+    vim.notify("Overlook: invalid prev popup in chain", vim.log.levels.ERROR)
     return false
   end
   local win_cfg

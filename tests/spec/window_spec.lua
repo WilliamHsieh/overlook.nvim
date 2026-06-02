@@ -351,59 +351,6 @@ describe("Window:restore_all in multi-split layouts", function()
   end)
 end)
 
-describe("Window:restore_all reuses each popup's original placement", function()
-  local Window = require("overlook.window")
-
-  before_each(function()
-    Window.instances = {}
-    vim.w = {}
-  end)
-
-  -- Regression: restore must put popups back where they were, not recompute the
-  -- first popup's position from the now-current cursor. A focus-reactive config
-  -- (e.g. focus.nvim) can drift the host cursor between close and restore, which
-  -- previously slid the whole restored chain sideways into the wrong place.
-  it("restores popups at their original positions even if the host cursor drifted", function()
-    local host = api.nvim_get_current_win()
-    api.nvim_buf_set_lines(api.nvim_win_get_buf(host), 0, -1, false, { string.rep("x", 120) })
-    api.nvim_win_set_cursor(host, { 1, 10 })
-
-    local w = Window.current()
-    assert.are.equal(host, w.winid)
-    w:open_popup { target_bufnr = make_buf(), lnum = 1, col = 1, title = "1" }
-    w:open_popup { target_bufnr = make_buf(), lnum = 1, col = 1, title = "2" }
-    w:open_popup { target_bufnr = make_buf(), lnum = 1, col = 1, title = "3" }
-    assert_invariant(w)
-
-    -- Compare at the win_config level (not rendered position) because nvim's
-    -- relative="win" layout pass only fully resolves between event-loop ticks,
-    -- and a programmatic peek runs in one tick (so peek-time rendered positions
-    -- in headless can collapse to the anchor). The semantic invariant is that
-    -- restore_all preserves each popup's stored col/row regardless of cursor drift.
-    local before = {}
-    for i, p in ipairs(w.stack.items) do
-      before[i] = { col = p.win_config.col, row = p.win_config.row }
-    end
-
-    w:close_all()
-
-    -- Drift the host cursor far from where the popups were computed.
-    api.nvim_set_current_win(host)
-    api.nvim_win_set_cursor(host, { 1, 90 })
-
-    w:restore_all()
-    assert.are.equal(3, w.stack:size())
-    assert_invariant(w)
-
-    for i, p in ipairs(w.stack.items) do
-      assert.are.equal(before[i].col, p.win_config.col)
-      assert.are.equal(before[i].row, p.win_config.row)
-    end
-
-    w:close_all()
-  end)
-end)
-
 describe("Window:restore focuses the restored popup", function()
   local Window = require("overlook.window")
 
