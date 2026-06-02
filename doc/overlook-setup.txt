@@ -1,5 +1,3 @@
-==============================================================================
-------------------------------------------------------------------------------
                                                                 *overlook-setup*
                                `M.setup`({opts})
 Initialize and configure overlook.nvim with user-provided options.

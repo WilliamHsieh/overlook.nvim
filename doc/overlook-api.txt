@@ -1,5 +1,3 @@
-==============================================================================
-------------------------------------------------------------------------------
                                                                   *overlook-api*
 Public API functions for overlook.nvim
 
@@ -119,11 +117,10 @@ Usage ~
 ------------------------------------------------------------------------------
                                                         *overlook-api.close_all*
                                 `M.close_all`()
-Close all overlook popups across all windows.
+Close all overlook popups in the current window's stack.
 
-Closes every overlook popup in all window stacks, completely clearing the
-overlook state. This is useful for quickly resetting the interface when
-you have multiple popup stacks open.
+Closes every popup in the host window's stack and refocuses the host
+window. Other host windows' stacks are not affected.
 
 Usage ~
 >lua
