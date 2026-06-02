@@ -13,13 +13,9 @@ local function setup_autocmd()
         vim.notify("Overlook: Invalid winid in WinClosed autocmd", vim.log.levels.ERROR)
         return
       end
-
-      local stacks = require("overlook.stack").instances
-      for _, stack in pairs(stacks) do
-        if stack:top() and stack:top().winid == winid then
-          stack:on_close()
-          break
-        end
+      local w = require("overlook.window").find_by_popup_winid(winid)
+      if w then
+        w:on_popup_closed(winid)
       end
     end,
   })

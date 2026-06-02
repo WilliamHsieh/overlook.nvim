@@ -1,7 +1,7 @@
 local M = {}
 
 --- Get options for a cursor peek popup.
----@return OverlookPopupOptions? opts Table suitable for overlook.ui.create_popup, or nil on error.
+---@return OverlookPopupOptions? opts Table suitable for Window:open_popup, or nil on error.
 function M.get()
   local buf = vim.api.nvim_get_current_buf()
   local file_path = vim.api.nvim_buf_get_name(buf)

@@ -45,7 +45,7 @@ local function peek_with_adapters(adapter_type, ...)
   -- async adapters
   if adapter.async then
     adapter.async_create_popup(function(opts)
-      require("overlook.ui").create_popup(opts)
+      require("overlook.window").current():open_popup(opts)
     end, ...)
     return
   end
@@ -58,7 +58,7 @@ local function peek_with_adapters(adapter_type, ...)
     return
   end
 
-  require("overlook.ui").create_popup(opts)
+  require("overlook.window").current():open_popup(opts)
 end
 
 setmetatable(M, {

@@ -1,10 +1,10 @@
-local stack = require("overlook.stack")
+local Window = require("overlook.window")
 local state = require("overlook.state")
 
 -- Store original API functions and mock call arguments
 local orig_api = {}
 local mock_call_args = {}
-local original_stack_top = nil
+local original_window_current = nil
 
 -- Helper to mock vim.api functions
 local function mock_api(name, mock_fn)
@@ -14,17 +14,28 @@ local function mock_api(name, mock_fn)
   vim.api[name] = mock_fn
 end
 
+-- Helper to set what Window.current():top() returns
+local function set_window_top(top_value)
+  Window.current = function()
+    return {
+      top = function()
+        return top_value
+      end,
+    }
+  end
+end
+
 -- Helper to reset mocks before each test
 local function setup_mocks()
   -- Restore original functions before applying mocks
   for k, v in pairs(orig_api) do
     vim.api[k] = v
   end
-  if original_stack_top then
-    stack.top = original_stack_top -- Restore original stack.top
+  if original_window_current then
+    Window.current = original_window_current
   end
   orig_api = {}
-  original_stack_top = nil
+  original_window_current = nil
 
   mock_call_args = { -- Reset captured args
     nvim_win_set_config = {},
@@ -73,13 +84,9 @@ local function setup_mocks()
     -- Simulate success
   end)
 
-  -- Mock stack.top by default returning nil
-  if stack.top then
-    original_stack_top = stack.top
-  end
-  stack.top = function()
-    return nil
-  end
+  -- Mock Window.current():top() by default returning nil
+  original_window_current = Window.current
+  set_window_top(nil)
 end
 
 describe("overlook.state", function()
@@ -90,11 +97,11 @@ describe("overlook.state", function()
     for k, v in pairs(orig_api) do
       vim.api[k] = v
     end
-    if original_stack_top then
-      stack.top = original_stack_top
+    if original_window_current then
+      Window.current = original_window_current
     end
     orig_api = {}
-    original_stack_top = nil
+    original_window_current = nil
   end)
 
   describe("update_title", function()
@@ -103,9 +110,7 @@ describe("overlook.state", function()
       mock_api("nvim_get_current_win", function()
         return 1
       end)
-      stack.top = function()
-        return { winid = 1, buf_id = 10 }
-      end
+      set_window_top { winid = 1, buf_id = 10 }
       mock_api("nvim_buf_get_name", function(buf_id)
         return "/some/path/my_file.py"
       end)
@@ -137,9 +142,7 @@ describe("overlook.state", function()
       mock_api("nvim_get_current_win", function()
         return 1
       end)
-      stack.top = function()
-        return { winid = 1, buf_id = 10 }
-      end
+      set_window_top { winid = 1, buf_id = 10 }
       mock_api("nvim_buf_get_name", function(buf_id)
         return ""
       end)
@@ -159,9 +162,7 @@ describe("overlook.state", function()
       mock_api("nvim_get_current_win", function()
         return 2
       end)
-      stack.top = function()
-        return { winid = 1, buf_id = 10 }
-      end
+      set_window_top { winid = 1, buf_id = 10 }
 
       -- Act
       state.update_title() -- Use state module function
@@ -175,9 +176,7 @@ describe("overlook.state", function()
       mock_api("nvim_get_current_win", function()
         return 1
       end)
-      stack.top = function()
-        return nil
-      end
+      set_window_top(nil)
 
       -- Act
       state.update_title() -- Use state module function
@@ -191,9 +190,7 @@ describe("overlook.state", function()
       mock_api("nvim_get_current_win", function()
         return 1
       end)
-      stack.top = function()
-        return { winid = 1, buf_id = 10 }
-      end
+      set_window_top { winid = 1, buf_id = 10 }
       mock_api("nvim_win_get_config", function(winid)
         error("Config error!")
       end)

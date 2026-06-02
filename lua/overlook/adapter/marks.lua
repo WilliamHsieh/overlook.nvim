@@ -4,7 +4,7 @@ local M = {}
 ---Gets the options required for the peek popup for a specific mark.
 ---Returns nil if the mark is invalid or an error occurs.
 ---@param mark_char string
----@return OverlookPopupOptions? opts Table suitable for overlook.ui.create_popup, or nil on error.
+---@return OverlookPopupOptions? opts Table suitable for Window:open_popup, or nil on error.
 function M.get(mark_char)
   -- Input validation
   if not mark_char or #mark_char ~= 1 then

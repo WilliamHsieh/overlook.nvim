@@ -10,8 +10,7 @@
 ---@tag overlook-api
 
 local Peek = require("overlook.peek")
-local Stack = require("overlook.stack")
-local Ui = require("overlook.ui")
+local Window = require("overlook.window")
 
 local M = {}
 
@@ -48,19 +47,7 @@ end
 ---@tag overlook-api.switch_focus
 ---@toc_entry
 M.switch_focus = function()
-  local switch_to_winid = nil
-  if vim.w.is_overlook_popup then
-    switch_to_winid = vim.w.overlook_popup.root_winid
-  elseif Stack.instances[vim.api.nvim_get_current_win()] and not Stack.empty() then
-    switch_to_winid = Stack.top().winid
-  end
-
-  if switch_to_winid == nil then
-    vim.notify("Overlook: no popup to focus")
-    return
-  end
-
-  pcall(vim.api.nvim_set_current_win, switch_to_winid)
+  Window.current():switch_focus()
 end
 
 --- Peek at the current cursor position.
@@ -125,8 +112,7 @@ end
 ---@tag overlook-api.restore_all_popups
 ---@toc_entry
 M.restore_all_popups = function()
-  local stack = require("overlook.stack").get_current_stack()
-  stack:restore_all()
+  Window.current():restore_all()
 end
 
 --- Restore the most recently closed popup.
@@ -140,15 +126,13 @@ end
 ---@tag overlook-api.restore_popup
 ---@toc_entry
 M.restore_popup = function()
-  local stack = require("overlook.stack").get_current_stack()
-  stack:restore()
+  Window.current():restore()
 end
 
---- Close all overlook popups across all windows.
+--- Close all overlook popups in the current window's stack.
 ---
---- Closes every overlook popup in all window stacks, completely clearing the
---- overlook state. This is useful for quickly resetting the interface when
---- you have multiple popup stacks open.
+--- Closes every popup in the host window's stack and refocuses the host
+--- window. Other host windows' stacks are not affected.
 ---
 ---@usage >lua
 ---   vim.keymap.set("n", "<leader>pc", require("overlook.api").close_all)
@@ -156,7 +140,7 @@ end
 ---@tag overlook-api.close_all
 ---@toc_entry
 M.close_all = function()
-  Stack.clear()
+  Window.current():close_all()
 end
 
 ---@text Window Promotion Functions
@@ -169,7 +153,7 @@ end
 ---@param open_command 'vsplit' | 'split' | 'tabnew' Vim command to open the window.
 local promote_top_to_window = function(open_command)
   local cmd = string.format("%s | buffer", open_command)
-  Ui.promote_popup_to_window(cmd)
+  Window.current():promote(cmd)
 end
 
 --- Open the top popup to a horizontal split window.
@@ -240,7 +224,7 @@ end
 ---@tag overlook-api.open_in_original_window
 ---@toc_entry
 M.open_in_original_window = function()
-  Ui.promote_popup_to_window("buffer")
+  Window.current():promote("buffer")
 end
 
 return M
