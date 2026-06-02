@@ -594,6 +594,66 @@ describe("Window:restore_all eventignore preservation", function()
   end)
 end)
 
+describe("Window:restore_all rollback when a trashed popup is unrestorable", function()
+  local Window = require("overlook.window")
+
+  local function eventignore_set()
+    local s = {}
+    for _, v in ipairs(vim.opt.eventignore:get()) do
+      s[v] = true
+    end
+    return s
+  end
+
+  before_each(function()
+    Window.instances = {}
+    vim.w = {}
+    vim.opt.eventignore = ""
+  end)
+
+  after_each(function()
+    vim.opt.eventignore = ""
+  end)
+
+  -- The rollback contract: if a trashed popup can no longer be opened (its
+  -- target_bufnr has been wiped, the host died, etc.), Popup.new returns nil,
+  -- restore_one returns (nil, true), the `peek_trash() == before` guard in
+  -- restore_all breaks the loop, eventignore is restored, and a single notify
+  -- explains why. Stack stays empty; trash retains the doomed entry.
+  it("exits cleanly when a trashed popup's target_bufnr has been wiped", function()
+    local w = Window.current()
+    local doomed_buf = make_buf()
+    w:open_popup { target_bufnr = doomed_buf, lnum = 1, col = 1 }
+    w:close_all()
+    assert.are.equal(1, #w.stack.trash)
+
+    -- Wipe the buffer while the popup sits in trash.
+    api.nvim_buf_delete(doomed_buf, { force = true })
+
+    -- User-set entry to verify eventignore preservation across the rollback.
+    vim.opt.eventignore = { "CursorHold" }
+
+    local notifications = {}
+    local original_notify = vim.notify
+    vim.notify = function(msg, level)
+      table.insert(notifications, { msg = msg, level = level })
+    end
+
+    w:restore_all() -- must NOT crash
+
+    vim.notify = original_notify
+
+    assert.are.equal(0, w.stack:size(), "stack must stay empty when restore fails")
+    assert.are.equal(1, #w.stack.trash, "doomed popup must remain in trash")
+    assert.are.equal(1, #notifications, "exactly one notify should fire")
+    assert.is_true(
+      notifications[1].msg:find("target buffer") ~= nil,
+      "notify message should mention the bad target buffer, got: " .. notifications[1].msg
+    )
+    assert.are.same({ CursorHold = true }, eventignore_set())
+  end)
+end)
+
 describe("Popup:open(false) opens without taking focus", function()
   local Popup = require("overlook.popup")
 
