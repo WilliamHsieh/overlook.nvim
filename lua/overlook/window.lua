@@ -135,6 +135,12 @@ end
 ---while closing (often a neighbouring split) doesn't wake a focus-reactive plugin
 ---(e.g. focus.nvim resizing the host). Focus is then set deliberately to the host.
 function Window:close_all()
+  -- Snapshot the caller's eventignore so the finalizer can restore it
+  -- verbatim. The naive `:remove(list)` would silently strip entries the user
+  -- or another plugin had set before our call (e.g. user did
+  -- `:set eventignore+=WinEnter` for a macro). We only own the global option;
+  -- vim.b.eventignore / vim.wo.eventignorewin are out of scope.
+  local saved = vim.opt.eventignore:get()
   local ignored = { "WinClosed", "WinEnter", "WinLeave", "BufEnter", "BufWinEnter" }
   vim.opt.eventignore:append(ignored)
 
@@ -146,7 +152,7 @@ function Window:close_all()
     self.stack:pop()
   end
 
-  vim.opt.eventignore:remove(ignored)
+  vim.opt.eventignore = saved
   pcall(api.nvim_set_current_win, self.winid)
 end
 
@@ -232,6 +238,11 @@ end
 ---to floats anyway (it skips relative != "") but other plugins may; this is
 ---defense in depth. Focus ends on the top popup (the last enter=true).
 function Window:restore_all()
+  -- Snapshot the caller's eventignore so the finalizer can restore it
+  -- verbatim. The naive `:remove(list)` would silently strip entries the user
+  -- or another plugin had set before our call. We only own the global option;
+  -- vim.b.eventignore / vim.wo.eventignorewin are out of scope.
+  local saved = vim.opt.eventignore:get()
   -- WinClosed is included so a stray close fired during the redraw between
   -- iterations can't prune the just-restored prev out from under the next
   -- iteration's anchor.
@@ -259,7 +270,7 @@ function Window:restore_all()
   -- Always restore eventignore, even if the loop errored. Otherwise a single
   -- failure leaves Win/Buf Enter/Leave globally suppressed for the rest of the
   -- session, silently breaking focus.nvim and any other reactive plugin.
-  vim.opt.eventignore:remove(ignored)
+  vim.opt.eventignore = saved
 
   if not ok then
     vim.notify("Overlook: restore_all error: " .. tostring(err), vim.log.levels.ERROR)

@@ -172,9 +172,24 @@ end)
 describe("Window:close_all", function()
   local Window = require("overlook.window")
 
+  -- Compare eventignore as a SET (Neovim dedupes the option on assignment, so
+  -- two sequences that differ only by duplicates are semantically equal).
+  local function eventignore_set()
+    local s = {}
+    for _, v in ipairs(vim.opt.eventignore:get()) do
+      s[v] = true
+    end
+    return s
+  end
+
   before_each(function()
     Window.instances = {}
     vim.w = {}
+    vim.opt.eventignore = ""
+  end)
+
+  after_each(function()
+    vim.opt.eventignore = ""
   end)
 
   it("closes all popups, empties the stack, refocuses root, preserves invariant", function()
@@ -191,6 +206,35 @@ describe("Window:close_all", function()
     assert.are.equal(root, api.nvim_get_current_win())
     assert.is_false(api.nvim_win_is_valid(winid1))
     assert.is_false(api.nvim_win_is_valid(winid2))
+  end)
+
+  -- Regression: the previous `vim.opt.eventignore:remove(list)` cleanup stripped
+  -- the named events unconditionally, wiping entries the user or another plugin
+  -- had set before close_all. close_all now snapshots and restores verbatim.
+  it("restores the caller's eventignore verbatim (empty before -> empty after)", function()
+    local w = Window.current()
+    w:open_popup { target_bufnr = make_buf(), lnum = 1, col = 1 }
+    w:close_all()
+    assert.are.same({}, eventignore_set())
+  end)
+
+  it("restores the caller's eventignore verbatim (non-overlapping pre-set)", function()
+    vim.opt.eventignore = { "CursorHold", "InsertLeave" }
+    local w = Window.current()
+    w:open_popup { target_bufnr = make_buf(), lnum = 1, col = 1 }
+    w:close_all()
+    assert.are.same({ CursorHold = true, InsertLeave = true }, eventignore_set())
+  end)
+
+  it("preserves the caller's eventignore entry that overlaps our suppression list", function()
+    -- User had WinEnter in their eventignore BEFORE calling close_all. Our
+    -- suppression added it (no-op via :append set semantics) and the old
+    -- :remove(list) would have stripped it — losing the user's setting.
+    vim.opt.eventignore = { "WinEnter" }
+    local w = Window.current()
+    w:open_popup { target_bufnr = make_buf(), lnum = 1, col = 1 }
+    w:close_all()
+    assert.are.same({ WinEnter = true }, eventignore_set())
   end)
 end)
 
@@ -417,6 +461,100 @@ describe("Window:restore focuses the restored popup", function()
     assert.are.equal(3, w.stack:size())
     assert.are.equal(w.stack:top().winid, api.nvim_get_current_win())
     assert_invariant(w)
+    w:close_all()
+  end)
+end)
+
+describe("Window:restore_all eventignore preservation", function()
+  local Window = require("overlook.window")
+
+  -- Compare eventignore as a set (Neovim dedupes on assignment).
+  local function eventignore_set()
+    local s = {}
+    for _, v in ipairs(vim.opt.eventignore:get()) do
+      s[v] = true
+    end
+    return s
+  end
+
+  before_each(function()
+    Window.instances = {}
+    vim.w = {}
+    vim.opt.eventignore = ""
+  end)
+
+  after_each(function()
+    vim.opt.eventignore = ""
+  end)
+
+  it("restores empty eventignore verbatim", function()
+    local w = Window.current()
+    w:open_popup { target_bufnr = make_buf(), lnum = 1, col = 1 }
+    w:close_all()
+    w:restore_all()
+    assert.are.same({}, eventignore_set())
+    w:close_all()
+  end)
+
+  it("preserves caller's non-overlapping eventignore entries", function()
+    vim.opt.eventignore = { "CursorHold", "InsertLeave" }
+    local w = Window.current()
+    w:open_popup { target_bufnr = make_buf(), lnum = 1, col = 1 }
+    w:close_all()
+    -- close_all clears its own additions; re-set the user's entries here to
+    -- isolate restore_all's behavior from close_all's.
+    vim.opt.eventignore = { "CursorHold", "InsertLeave" }
+    w:restore_all()
+    assert.are.same({ CursorHold = true, InsertLeave = true }, eventignore_set())
+    w:close_all()
+  end)
+
+  it("preserves caller's eventignore entry overlapping our suppression list", function()
+    local w = Window.current()
+    w:open_popup { target_bufnr = make_buf(), lnum = 1, col = 1 }
+    w:close_all()
+    vim.opt.eventignore = { "WinEnter" }
+    w:restore_all()
+    assert.are.same({ WinEnter = true }, eventignore_set())
+    w:close_all()
+  end)
+
+  it("restores eventignore even when the loop errors mid-restore", function()
+    local w = Window.current()
+    w:open_popup { target_bufnr = make_buf(), lnum = 1, col = 1 }
+    w:open_popup { target_bufnr = make_buf(), lnum = 1, col = 1 }
+    w:close_all()
+
+    -- Shadow restore_one on this instance (via __index lookup, the metatable's
+    -- restore_one is hidden by an instance field) to force it to throw on the
+    -- second iteration. We monkey-patch the INSTANCE, not the module, because
+    -- the test sees only the module exports (M), while restore_one lives on
+    -- the metatable inside window.lua.
+    local original = w.restore_one
+    local call_count = 0
+    w.restore_one = function(self_, enter)
+      call_count = call_count + 1
+      if call_count == 2 then
+        error("boom")
+      end
+      return original(self_, enter)
+    end
+
+    vim.opt.eventignore = { "CursorHold" }
+    local notify_calls = 0
+    local original_notify = vim.notify
+    vim.notify = function()
+      notify_calls = notify_calls + 1
+    end
+
+    w:restore_all() -- should NOT propagate the error
+
+    vim.notify = original_notify
+    w.restore_one = nil -- remove the instance shadow
+
+    assert.are.equal(1, notify_calls)
+    assert.are.same({ CursorHold = true }, eventignore_set())
+
     w:close_all()
   end)
 end)
