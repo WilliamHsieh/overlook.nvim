@@ -654,6 +654,87 @@ describe("Window:restore_all rollback when a trashed popup is unrestorable", fun
   end)
 end)
 
+describe("Window: restore preserves live buffer and cursor", function()
+  local Window = require("overlook.window")
+
+  before_each(function()
+    Window.instances = {}
+    vim.w = {}
+    -- Register the WinLeave snapshot autocmd (idempotent: the augroup uses
+    -- clear = true).
+    require("overlook").setup {}
+  end)
+
+  -- When the user navigates inside a popup (gd, gf, :edit, etc.) the popup's
+  -- window buffer changes but popup.opts.target_bufnr is captured once at
+  -- peek time and never refreshed -- restore would reopen the ORIGINAL peek
+  -- target instead of what the user was last viewing. Same applies to
+  -- cursor position. Two snapshot paths cover this:
+  --   (1) WinLeave autocmd in init.lua  -- focus leaves the popup
+  --   (2) Popup:close                    -- close_all suppresses WinLeave
+  it("snapshots via WinLeave when user switches focus before close_all", function()
+    local host = api.nvim_get_current_win()
+    local buf_a = make_buf()
+    local buf_b = make_buf()
+
+    local w = Window.current()
+    local p = w:open_popup { target_bufnr = buf_a, lnum = 1, col = 1 }
+    assert.is_not_nil(p)
+
+    -- Mimic gd: switch popup's buffer and move the cursor.
+    api.nvim_win_set_buf(p.winid, buf_b)
+    api.nvim_win_set_cursor(p.winid, { 3, 0 }) -- 0-indexed col 0 == 1-indexed col 1
+
+    -- User switches focus -> WinLeave fires on the popup -> snapshot.
+    api.nvim_set_current_win(host)
+
+    -- Live state was written back to opts.
+    assert.are.equal(buf_b, p.opts.target_bufnr)
+    assert.are.equal(3, p.opts.lnum)
+    assert.are.equal(1, p.opts.col) -- opts.col is 1-indexed
+
+    -- Close + restore should reopen buf_b at the snapshotted cursor.
+    w:close_all()
+    w:restore()
+    local restored = w.stack:top()
+    assert.are.equal(buf_b, api.nvim_win_get_buf(restored.winid))
+    local cursor = api.nvim_win_get_cursor(restored.winid)
+    assert.are.equal(3, cursor[1])
+    assert.are.equal(0, cursor[2])
+
+    w:close_all()
+  end)
+
+  it("snapshots via Popup:close when user is inside the popup at close_all time", function()
+    local buf_a = make_buf()
+    local buf_b = make_buf()
+
+    local w = Window.current()
+    local p = w:open_popup { target_bufnr = buf_a, lnum = 1, col = 1 }
+    assert.is_not_nil(p)
+
+    api.nvim_win_set_buf(p.winid, buf_b)
+    api.nvim_win_set_cursor(p.winid, { 2, 0 })
+
+    -- Do NOT leave focus first. close_all wraps the loop in eventignore so
+    -- WinLeave is suppressed; Popup:close's snapshot must catch the live state.
+    w:close_all()
+
+    assert.are.equal(buf_b, w.stack.trash[1].opts.target_bufnr)
+    assert.are.equal(2, w.stack.trash[1].opts.lnum)
+    assert.are.equal(1, w.stack.trash[1].opts.col)
+
+    w:restore()
+    local restored = w.stack:top()
+    assert.are.equal(buf_b, api.nvim_win_get_buf(restored.winid))
+    local cursor = api.nvim_win_get_cursor(restored.winid)
+    assert.are.equal(2, cursor[1])
+    assert.are.equal(0, cursor[2])
+
+    w:close_all()
+  end)
+end)
+
 describe("Popup:open(false) opens without taking focus", function()
   local Popup = require("overlook.popup")
 

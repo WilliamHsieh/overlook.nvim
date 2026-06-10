@@ -197,8 +197,29 @@ function Popup:open(enter)
   return true
 end
 
+---Capture the popup's live buffer + cursor into self.opts so restore reopens
+---what the user was last looking at, not the original peek target. Called
+---from two places: (1) Popup:close, which catches the close_all path
+---(eventignore suppresses WinLeave there); (2) the WinLeave autocmd in
+---init.lua, which catches focus-leaves and external `:close` paths (where
+---Popup:close is not invoked because the popup closes via nvim's own
+---WinClosed -> on_popup_closed route).
+function Popup:snapshot_state()
+  if not self:is_valid() then
+    return
+  end
+  self.opts.target_bufnr = api.nvim_win_get_buf(self.winid)
+  local cursor = api.nvim_win_get_cursor(self.winid)
+  self.opts.lnum = cursor[1]
+  -- opts.col is 1-indexed (the adapters use vim.fn.getpos which returns
+  -- 1-indexed); nvim_win_get_cursor returns 0-indexed. Convert.
+  -- set_cursor_position converts back via math.max(0, col - 1) on restore.
+  self.opts.col = cursor[2] + 1
+end
+
 function Popup:close()
   if self:is_valid() then
+    self:snapshot_state()
     pcall(api.nvim_win_close, self.winid, false)
   end
 end

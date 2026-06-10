@@ -54,6 +54,37 @@ local function setup_autocmd()
       state.cleanup_touched_buffer(args.buf)
     end,
   })
+
+  -- Snapshot the popup's live buffer+cursor into opts whenever focus leaves
+  -- it, so a later restore reopens what the user was last viewing (after gd,
+  -- gf, manual cursor moves, etc.). close_all suppresses WinLeave via
+  -- eventignore so this autocmd doesn't fire during bulk close -- Popup:close
+  -- snapshots there directly. This autocmd covers the other paths: user
+  -- switches focus to host (popup still open, will be restored later) and
+  -- user runs `:close` from inside a popup (WinLeave fires before WinClosed).
+  vim.api.nvim_create_autocmd("WinLeave", {
+    group = augroup,
+    callback = function()
+      local winid = vim.api.nvim_get_current_win()
+      -- Read via the API rather than vim.w because tests reassign
+      -- `vim.w = {}` which detaches the proxy from real window-locals; the
+      -- API call still reaches the underlying var.
+      local ok, is_popup = pcall(vim.api.nvim_win_get_var, winid, "is_overlook_popup")
+      if not ok or not is_popup then
+        return
+      end
+      local w = require("overlook.window").find_by_popup_winid(winid)
+      if not w then
+        return
+      end
+      for _, popup in ipairs(w.stack.items) do
+        if popup.winid == winid then
+          popup:snapshot_state()
+          return
+        end
+      end
+    end,
+  })
 end
 
 --- Initialize and configure overlook.nvim with user-provided options.
