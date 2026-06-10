@@ -129,31 +129,63 @@ function Window:promote(open_command)
   vim.bo.buflisted = true
 end
 
----Close all popups in this Window's stack atomically. Suppresses lifecycle and
----focus events during the bulk close -- WinClosed to prevent re-entrant
----reconciliation, and Win/Buf Enter/Leave so the transient focus Neovim assigns
----while closing (often a neighbouring split) doesn't wake a focus-reactive plugin
----(e.g. focus.nvim resizing the host). Focus is then set deliberately to the host.
-function Window:close_all()
-  -- Snapshot the caller's eventignore so the finalizer can restore it
-  -- verbatim. The naive `:remove(list)` would silently strip entries the user
-  -- or another plugin had set before our call (e.g. user did
-  -- `:set eventignore+=WinEnter` for a macro). We only own the global option;
-  -- vim.b.eventignore / vim.wo.eventignorewin are out of scope.
-  local saved = vim.opt.eventignore:get()
-  local ignored = { "WinClosed", "WinEnter", "WinLeave", "BufEnter", "BufWinEnter" }
-  vim.opt.eventignore:append(ignored)
+---Events suppressed for the duration of a bulk operation: the transient focus
+---walk across popups/splits must not wake focus-reactive plugins (focus.nvim
+---resizing the host, etc.). WinClosed is deliberately NOT in this list --
+---other plugins legitimately track window closes, so those events keep firing;
+---our own re-entrant reconciliation is prevented by the _reconcile_suspended
+---flag instead (see Window:on_popup_closed).
+local BULK_IGNORED_EVENTS = { "WinEnter", "WinLeave", "BufEnter", "BufWinEnter" }
 
-  while not self.stack:empty() do
-    local top = self.stack:top()
-    if top then
-      top:close()
+---Run fn with focus events suppressed and WinClosed reconciliation suspended.
+---Snapshots the caller's eventignore and restores it verbatim even if fn
+---throws -- the naive `:remove(list)` would strip entries the user or another
+---plugin had set before our call. We only own the global option;
+---vim.b.eventignore / vim.wo.eventignorewin are out of scope. The caller
+---decides whether to swallow or re-raise the error.
+---@param fn fun()
+---@return boolean ok, any err
+function Window:_with_bulk_guard(fn)
+  local saved = vim.opt.eventignore:get()
+  vim.opt.eventignore:append(BULK_IGNORED_EVENTS)
+  self._reconcile_suspended = true
+
+  local ok, err = pcall(fn)
+
+  self._reconcile_suspended = false
+  vim.opt.eventignore = saved
+  return ok, err
+end
+
+---Close all popups in this Window's stack atomically. Focus events are
+---suppressed during the bulk close so the transient focus Neovim assigns
+---while closing (often a neighbouring split) doesn't wake a focus-reactive
+---plugin (e.g. focus.nvim resizing the host); WinClosed fires normally for
+---other plugins while our own reconciliation is suspended via the bulk guard.
+---On a loop error the guard still restores eventignore, then the error is
+---re-raised so callers (Window:promote) abort as before. Focus is then set
+---deliberately to the host, and the dynamic close-keymap refresh is scheduled
+---explicitly -- the final set_current_win is a no-op (firing no WinEnter)
+---when focus is already on the host.
+function Window:close_all()
+  local ok, err = self:_with_bulk_guard(function()
+    while not self.stack:empty() do
+      local top = self.stack:top()
+      if top then
+        top:close()
+      end
+      self.stack:pop()
     end
-    self.stack:pop()
+  end)
+
+  if not ok then
+    error(err, 0)
   end
 
-  vim.opt.eventignore = saved
   pcall(api.nvim_set_current_win, self.winid)
+  vim.schedule(function()
+    require("overlook.state").update_keymap()
+  end)
 end
 
 ---Pop popups from the top while the top popup's window is invalid.
@@ -172,6 +204,9 @@ end
 ---Always refocuses (the closed window was typically the focused one).
 ---@param winid integer The closed popup's window id.
 function Window:on_popup_closed(winid)
+  if self._reconcile_suspended then
+    return -- a bulk op owns the stack right now; it does its own bookkeeping
+  end
   self.stack:remove_by_winid(winid)
   self:prune_invalid()
 
@@ -232,25 +267,15 @@ end
 ---nvim runs the layout pass that anchors a relative="win" float against the
 ---host's CURRENT position -- with enter=false, the layout pass is skipped and
 ---the float gets stuck at whatever transient anchor position existed at the
----instant of nvim_open_win. To keep focus-reactive plugins (focus.nvim, etc.)
----from observing the transient focus walk across the restored popups, the loop
----is wrapped in eventignore for Win/Buf Enter/Leave. focus.nvim wouldn't react
----to floats anyway (it skips relative != "") but other plugins may; this is
----defense in depth. Focus ends on the top popup (the last enter=true).
+---instant of nvim_open_win. The bulk guard keeps focus-reactive plugins
+---(focus.nvim, etc.) from observing the transient focus walk across the
+---restored popups and suspends WinClosed reconciliation, so a stray close
+---fired during the redraw between iterations can't prune the just-restored
+---prev out from under the next iteration's anchor (prune_invalid catches the
+---stale entry later). Focus ends on the top popup (the last enter=true).
 function Window:restore_all()
-  -- Snapshot the caller's eventignore so the finalizer can restore it
-  -- verbatim. The naive `:remove(list)` would silently strip entries the user
-  -- or another plugin had set before our call. We only own the global option;
-  -- vim.b.eventignore / vim.wo.eventignorewin are out of scope.
-  local saved = vim.opt.eventignore:get()
-  -- WinClosed is included so a stray close fired during the redraw between
-  -- iterations can't prune the just-restored prev out from under the next
-  -- iteration's anchor.
-  local ignored = { "WinEnter", "WinLeave", "BufEnter", "BufWinEnter", "WinClosed" }
-  vim.opt.eventignore:append(ignored)
-
   local restored_any = false
-  local ok, err = pcall(function()
+  local ok, err = self:_with_bulk_guard(function()
     while true do
       local before = self.stack:peek_trash()
       if not before then
@@ -266,11 +291,6 @@ function Window:restore_all()
       -- next iteration anchors to it.
     end
   end)
-
-  -- Always restore eventignore, even if the loop errored. Otherwise a single
-  -- failure leaves Win/Buf Enter/Leave globally suppressed for the rest of the
-  -- session, silently breaking focus.nvim and any other reactive plugin.
-  vim.opt.eventignore = saved
 
   if not ok then
     vim.notify("Overlook: restore_all error: " .. tostring(err), vim.log.levels.ERROR)

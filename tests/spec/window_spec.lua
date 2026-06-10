@@ -238,6 +238,130 @@ describe("Window:close_all", function()
   end)
 end)
 
+describe("Window bulk-op re-entry guard", function()
+  local Window = require("overlook.window")
+
+  local function eventignore_set()
+    local s = {}
+    for _, v in ipairs(vim.opt.eventignore:get()) do
+      s[v] = true
+    end
+    return s
+  end
+
+  before_each(function()
+    Window.instances = {}
+    vim.w = {}
+    vim.opt.eventignore = ""
+  end)
+
+  after_each(function()
+    vim.opt.eventignore = ""
+  end)
+
+  it("on_popup_closed is a no-op while _reconcile_suspended is set", function()
+    local w = Window.current()
+    w:open_popup { target_bufnr = make_buf(), lnum = 1, col = 1 }
+    local p2 = w:open_popup { target_bufnr = make_buf(), lnum = 1, col = 1 }
+
+    -- Close p2's window externally with WinClosed suppressed so we drive
+    -- reconciliation by hand.
+    vim.opt.eventignore:append("WinClosed")
+    api.nvim_win_close(p2.winid, true)
+    vim.opt.eventignore:remove("WinClosed")
+
+    w._reconcile_suspended = true
+    w:on_popup_closed(p2.winid)
+    assert.are.equal(2, w.stack:size(), "guarded on_popup_closed must not touch the stack")
+
+    w._reconcile_suspended = false
+    w:on_popup_closed(p2.winid)
+    assert.are.equal(1, w.stack:size(), "unguarded on_popup_closed reconciles normally")
+
+    w:close_all()
+  end)
+
+  -- WinClosed is no longer suppressed during close_all: other plugins
+  -- legitimately track window closes. Only OUR reconciliation is suspended.
+  it("lets third-party WinClosed autocmds observe popup closes during close_all", function()
+    local w = Window.current()
+    local p1 = w:open_popup { target_bufnr = make_buf(), lnum = 1, col = 1 }
+    local p2 = w:open_popup { target_bufnr = make_buf(), lnum = 1, col = 1 }
+    local id1, id2 = p1.winid, p2.winid
+
+    local seen = {}
+    local aug = api.nvim_create_augroup("TestWinClosedSpy", { clear = true })
+    api.nvim_create_autocmd("WinClosed", {
+      group = aug,
+      callback = function(args)
+        seen[tonumber(args.match)] = true
+      end,
+    })
+
+    w:close_all()
+    api.nvim_del_augroup_by_id(aug)
+
+    assert.is_true(seen[id1] == true, "third-party autocmd should see p1 close")
+    assert.is_true(seen[id2] == true, "third-party autocmd should see p2 close")
+  end)
+
+  it("close_all re-raises loop errors after restoring eventignore and the flag", function()
+    local w = Window.current()
+    w:open_popup { target_bufnr = make_buf(), lnum = 1, col = 1 }
+    local top = w.stack:top()
+
+    -- Shadow the instance's close to throw (hides the metatable method).
+    top.close = function()
+      error("boom")
+    end
+
+    vim.opt.eventignore = { "CursorHold" }
+    assert.has_error(function()
+      w:close_all()
+    end)
+
+    -- The guard's finalizer ran despite the re-raise.
+    assert.are.same({ CursorHold = true }, eventignore_set())
+    assert.is_false(w._reconcile_suspended)
+
+    -- Cleanup: drop the shadow and close for real.
+    top.close = nil
+    w:close_all()
+  end)
+
+  -- Rider: close_all schedules update_keymap explicitly. The final
+  -- nvim_set_current_win(host) is a no-op (firing no WinEnter) when focus is
+  -- already on the host, so without the explicit schedule the dynamic close
+  -- keymap on the dead popup's buffer would linger until the next Buf/WinEnter.
+  it("close_all schedules update_keymap even when focus is already on the host", function()
+    local host = api.nvim_get_current_win()
+    local w = Window.current()
+    w:open_popup { target_bufnr = make_buf(), lnum = 1, col = 1 }
+
+    -- Park focus on the host BEFORE close_all so the final set_current_win
+    -- is a no-op; flush the WinEnter-noise schedule from this switch first.
+    api.nvim_set_current_win(host)
+    vim.wait(50, function()
+      return false
+    end)
+
+    local state = require("overlook.state")
+    local original = state.update_keymap
+    local calls = 0
+    state.update_keymap = function()
+      calls = calls + 1
+    end
+
+    w:close_all()
+    vim.wait(100, function()
+      return calls > 0
+    end)
+
+    state.update_keymap = original
+    assert.is_true(calls >= 1, "close_all must schedule update_keymap")
+  end)
+end)
+
 describe("Window:on_popup_closed", function()
   local Window = require("overlook.window")
 
