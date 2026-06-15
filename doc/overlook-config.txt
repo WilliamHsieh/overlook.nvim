@@ -69,15 +69,6 @@ Fields ~
 {keys} `(optional)` `(table<string, string>)` Keymaps specific to the popup UI.
 
 ------------------------------------------------------------------------------
-*OverlookAdapterOptions*
-
-Class ~
-{OverlookAdapterOptions}
-
-Fields ~
-{marks} `(optional)` `(table)` Configuration for the 'marks' adapter.
-
-------------------------------------------------------------------------------
 *OverlookOptions*
 
 Class ~
@@ -85,7 +76,6 @@ Class ~
 
 Fields ~
 {ui} `(OverlookOptions.UI)` UI settings for the popup windows.
-{adapters} `(OverlookAdapterOptions)` Adapter-specific configurations.
 {on_stack_empty} `(optional)` `(fun())` Optional function called when the last Overlook popup closes.
 
 ------------------------------------------------------------------------------
@@ -139,15 +129,6 @@ Type ~
       -- Keymaps specific to the popup UI
       keys = {
         close = "q", -- Key to close the topmost popup
-      },
-    },
-
-    -- Adapter-specific configurations
-    adapters = {
-      -- check `overlook.adapter.cursor` for implementation details
-      your_custom_adapter = {
-        ---@return OverlookPopupOptions? @Table suitable for Window:open_popup, or nil on error.
-        get = function() end,
       },
     },
 
