@@ -43,6 +43,15 @@ function M.current()
   return M.get(winid)
 end
 
+---Open a popup in the current context's window stack. The single entry point
+---peek sources use: they build OverlookPopupOptions and hand them here, so a
+---source never has to know about the Window/Stack/Popup layering.
+---@param opts OverlookPopupOptions
+---@return OverlookPopup?
+function M.open_popup(opts)
+  return M.current():open_popup(opts)
+end
+
 ---Construct + open a popup using this Window's current context (host, top
 ---of stack as prev, current depth). Returns the popup on success, nil on
 ---failure. Shared between open_popup (push semantics) and restore_one

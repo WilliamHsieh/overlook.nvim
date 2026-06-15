@@ -9,7 +9,6 @@
 ---
 ---@tag overlook-api
 
-local Peek = require("overlook.peek")
 local Window = require("overlook.window")
 
 local M = {}
@@ -36,7 +35,7 @@ local M = {}
 ---@tag overlook-api.peek_definition
 ---@toc_entry
 M.peek_definition = function()
-  Peek.definition()
+  require("overlook.peek.definition")()
 end
 
 --- Switch focus between the top popup and the root window.
@@ -66,7 +65,7 @@ end
 ---@tag overlook-api.peek_cursor
 ---@toc_entry
 M.peek_cursor = function()
-  Peek.cursor()
+  require("overlook.peek.cursor")()
 end
 
 --- Peek at a specific mark location.
@@ -83,14 +82,13 @@ end
 ---@tag overlook-api.peek_mark
 ---@toc_entry
 M.peek_mark = function()
-  Peek.marks()
   vim.ui.input({ prompt = "Overlook Mark:" }, function(input)
     if input == nil or input == "" then
       return
     end
 
     if #input == 1 then
-      Peek.marks(input)
+      require("overlook.peek.marks")(input)
     else
       vim.notify("Overlook Error: Invalid mark. Please enter a single character.", vim.log.levels.ERROR)
     end

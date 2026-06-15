@@ -1,154 +1,94 @@
-describe("Cursor Adapter", function()
-  local peek_mod
-
+describe("overlook.peek.cursor", function()
+  local cursor
+  local open_popup_calls
+  local notify_calls
   local original_notify
-  local mock_calls
-  local original_get_current_buf -- Store original vim.api.nvim_get_current_buf
-  local original_getpos -- Store original vim.fn.getpos
+  local original_get_current_buf
+  local original_getpos
+  local original_buf_get_name
 
   before_each(function()
-    -- Reset mock calls table
-    mock_calls = {
-      open_popup = {},
-      notify = {},
-    }
+    open_popup_calls = {}
+    notify_calls = {}
 
-    -- Stub overlook.window so peek doesn't need a real Neovim window
-    local fake_window = {
-      open_popup = function(_, opts)
-        table.insert(mock_calls.open_popup, opts)
-      end,
-    }
+    -- The source hands options to require("overlook.window").open_popup.
     package.loaded["overlook.window"] = {
-      current = function()
-        return fake_window
+      open_popup = function(opts)
+        table.insert(open_popup_calls, opts)
       end,
     }
 
-    -- Store and mock vim.notify
     original_notify = vim.notify
-    vim.notify = function(msg, level, opts)
-      table.insert(mock_calls.notify, { msg = msg, level = level, opts = opts })
+    vim.notify = function(msg, level)
+      table.insert(notify_calls, { msg = msg, level = level })
     end
 
-    -- Store and mock vim.api.nvim_get_current_buf
     original_get_current_buf = vim.api.nvim_get_current_buf
-    vim.api.nvim_get_current_buf = function()
-      -- This will be overridden in the specific test that creates a buffer
-      return 0 -- Default mock for tests that don't care or handle unnamed
-    end
-
-    -- Store and mock vim.fn.getpos
     original_getpos = vim.fn.getpos
-    vim.fn.getpos = function(target)
-      if target == "." then
-        -- This will be overridden in the specific test that sets cursor
-        return { 0, 1, 1, 0 } -- Default mock
-      end
-      return original_getpos(target) -- Call original for other targets
-    end
+    original_buf_get_name = vim.api.nvim_buf_get_name
 
-    -- Reload peek so it picks up the window stub
-    package.loaded["overlook.peek"] = nil
-    peek_mod = require("overlook.peek")
+    package.loaded["overlook.peek.cursor"] = nil
+    cursor = require("overlook.peek.cursor")
   end)
 
   after_each(function()
-    -- Restore original functions
-    if original_notify then
-      vim.notify = original_notify
-    end
-    original_notify = nil
-
-    if original_get_current_buf then
-      vim.api.nvim_get_current_buf = original_get_current_buf
-    end
-    original_get_current_buf = nil
-
-    if original_getpos then
-      vim.fn.getpos = original_getpos
-    end
-    original_getpos = nil
-
-    -- Clean up stubs
+    vim.notify = original_notify
+    vim.api.nvim_get_current_buf = original_get_current_buf
+    vim.fn.getpos = original_getpos
+    vim.api.nvim_buf_get_name = original_buf_get_name
     package.loaded["overlook.window"] = nil
-    package.loaded["overlook.peek"] = nil
-
-    -- Clean up any test buffers if needed
+    package.loaded["overlook.peek.cursor"] = nil
     pcall(vim.cmd, "bw! test_buffer.txt")
-    pcall(vim.cmd, "bw!") -- For unnamed buffer test
+    pcall(vim.cmd, "bw!")
   end)
 
-  it("should call create_popup with cursor context when peek('cursor') is called", function()
-    -- Setup: Create a dummy buffer and set content
+  it("opens a popup with cursor context for a named buffer", function()
     vim.cmd("edit! test_buffer.txt")
-    local expected_bufnr = vim.api.nvim_get_current_buf() -- Get the buffer number
-    -- Override mocks for this specific test case
+    local bufnr = vim.api.nvim_get_current_buf()
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "line 1", "line 2", "line 3", "line 4", "line 5" })
+
     vim.api.nvim_get_current_buf = function()
-      return expected_bufnr
+      return bufnr
     end
     vim.fn.getpos = function(target)
       if target == "." then
-        return { expected_bufnr, 3, 5, 0 }
+        return { bufnr, 3, 5, 0 }
       end
-      return { 0, 0, 0, 0 } -- Should not happen in this test flow for '.'
-    end
-
-    vim.api.nvim_buf_set_lines(expected_bufnr, 0, -1, false, {
-      "line 1",
-      "line 2",
-      "line 3 is the cursor line",
-      "line 4",
-      "line 5",
-    })
-    vim.api.nvim_win_set_cursor(0, { 3, 5 }) -- Set cursor to line 3, column 5
-
-    -- Action
-    peek_mod.cursor()
-
-    -- Assert
-    assert.are.equal(1, #mock_calls.open_popup)
-    local call_args = mock_calls.open_popup[1]
-    assert.is_table(call_args)
-    assert.matches("test_buffer.txt", call_args.title) -- Expect filename again
-    assert.are.equal(expected_bufnr, call_args.target_bufnr) -- target_bufnr should be the actual buffer
-    assert.are.equal(3, call_args.lnum)
-    assert.are.equal(5, call_args.col) -- Column from getpos is 1-indexed, set_cursor is 0-indexed
-    assert.matches("test_buffer.txt", call_args.file_path) -- Check file_path
-    assert.is_nil(call_args.content) -- Should not have content
-    assert.is_nil(call_args.highlight_line) -- Should not have highlight_line
-
-    -- Teardown (moved to after_each)
-    -- vim.cmd("bw! test_buffer.txt")
-  end)
-
-  it("should handle unnamed buffers gracefully", function()
-    -- Setup: Create an unnamed buffer
-    vim.cmd("enew")
-    -- Override mocks for this specific test case (unnamed buffer)
-    vim.api.nvim_get_current_buf = function()
-      return vim.fn.bufnr()
-    end -- Use actual current unnamed buf
-    vim.fn.getpos = function(target) -- Mock getpos for unnamed buffer scenario
-      if target == "." then
-        return { vim.fn.bufnr(), 1, 0, 0 }
-      end -- e.g. line 1, col 0
       return { 0, 0, 0, 0 }
     end
+    vim.api.nvim_buf_get_name = function(b)
+      if b == 0 or b == bufnr then
+        return "/tmp/test_buffer.txt"
+      end
+      return original_buf_get_name(b)
+    end
 
-    assert.equal("", vim.api.nvim_buf_get_name(0))
+    cursor()
 
-    -- Action
-    peek_mod.cursor()
+    assert.are.equal(1, #open_popup_calls)
+    local o = open_popup_calls[1]
+    assert.are.equal(bufnr, o.target_bufnr)
+    assert.are.equal(3, o.lnum)
+    assert.are.equal(5, o.col)
+    assert.matches("test_buffer.txt", o.title)
+    assert.is_nil(o.file_path) -- file_path was removed from the options shape
+    assert.are.equal(0, #notify_calls)
+  end)
 
-    -- Assert
-    assert.are.equal(0, #mock_calls.open_popup) -- Should not be called
-    assert.are.equal(2, #mock_calls.notify)
-    local notify_call = mock_calls.notify[1]
-    assert.matches("Cannot peek in unnamed buffer", notify_call.msg) -- Use matches for flexibility
-    assert.are.equal(vim.log.levels.WARN, notify_call.level)
+  it("notifies and does not open for an unnamed buffer", function()
+    vim.cmd("enew")
+    vim.api.nvim_buf_get_name = function(b)
+      if b == 0 then
+        return ""
+      end
+      return original_buf_get_name(b)
+    end
 
-    -- Teardown (moved to after_each)
-    -- vim.cmd("bw!")
+    cursor()
+
+    assert.are.equal(0, #open_popup_calls)
+    assert.are.equal(1, #notify_calls)
+    assert.matches("Cannot peek in unnamed buffer", notify_calls[1].msg)
+    assert.are.equal(vim.log.levels.WARN, notify_calls[1].level)
   end)
 end)

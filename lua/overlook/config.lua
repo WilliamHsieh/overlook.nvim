@@ -67,19 +67,11 @@ local M = {}
 ---@field size_ratio number Default size ratio (0.0 to 1.0) used to calculate initial size.
 ---@field keys? table<string, string> Keymaps specific to the popup UI.
 
---- *OverlookAdapterOptions*
----
----@class OverlookAdapterOptions
----
----@field marks? table Configuration for the 'marks' adapter.
--- ---@field lsp? table Placeholder for future LSP adapter config
-
 --- *OverlookOptions*
 ---
 ---@class OverlookOptions
 ---
 ---@field ui OverlookOptions.UI UI settings for the popup windows.
----@field adapters OverlookAdapterOptions Adapter-specific configurations.
 ---@field on_stack_empty? fun() Optional function called when the last Overlook popup closes.
 
 --- Default configuration options for overlook.nvim.
@@ -132,15 +124,6 @@ local defaults = {
     },
   },
 
-  -- Adapter-specific configurations
-  adapters = {
-    -- check `overlook.adapter.cursor` for implementation details
-    your_custom_adapter = {
-      ---@return OverlookPopupOptions? @Table suitable for Window:open_popup, or nil on error.
-      get = function() end,
-    },
-  },
-
   -- Optional hook called when the last Overlook popup closes
   on_stack_empty = nil,
 }
@@ -154,7 +137,7 @@ local options = vim.deepcopy(defaults)
 ---@param user_opts? table User configuration options. Can contain any subset of OverlookOptions fields.
 function M.setup(user_opts)
   if user_opts then
-    -- Use deep_extend to merge nested tables like 'ui' and 'adapters'.
+    -- Use deep_extend to merge nested tables like 'ui'.
     -- 'force' mode replaces arrays entirely if present, usually desired for config.
     options = vim.tbl_deep_extend("force", options, user_opts or {})
   end

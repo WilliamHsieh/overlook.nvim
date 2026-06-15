@@ -1,84 +1,87 @@
 local api = vim.api
 
-describe("overlook.adapter.marks", function()
-  local marks_adapter
-
-  -- Mock vim.notify to check messages
-  local notify_calls = {}
-  local original_notify = vim.notify
-  local mock_notify = function(msg, level, opts)
-    table.insert(notify_calls, { msg = msg, level = level, opts = opts })
-  end
-
-  -- Mock buffer functions for specific test cases
-  local original_buf_is_loaded = api.nvim_buf_is_loaded
-  local original_buf_is_valid = api.nvim_buf_is_valid
-  local original_buf_get_name = api.nvim_buf_get_name
-  local original_getpos = vim.fn.getpos
+describe("overlook.peek.marks", function()
+  local marks
+  local open_popup_calls
+  local notify_calls
+  local original_notify
+  local original_buf_is_loaded
+  local original_buf_is_valid
+  local original_buf_get_name
+  local original_getpos
 
   before_each(function()
-    -- Reload the module before each test to reset state if necessary
-    package.loaded["overlook.adapter.marks"] = nil
-    marks_adapter = require("overlook.adapter.marks")
+    open_popup_calls = {}
     notify_calls = {}
-    vim.notify = mock_notify
-    -- Reset mocks
-    api.nvim_buf_is_loaded = original_buf_is_loaded
-    api.nvim_buf_is_valid = original_buf_is_valid
-    api.nvim_buf_get_name = original_buf_get_name
-    vim.fn.getpos = original_getpos
+
+    package.loaded["overlook.window"] = {
+      open_popup = function(opts)
+        table.insert(open_popup_calls, opts)
+      end,
+    }
+
+    original_notify = vim.notify
+    vim.notify = function(msg, level)
+      table.insert(notify_calls, { msg = msg, level = level })
+    end
+
+    original_buf_is_loaded = api.nvim_buf_is_loaded
+    original_buf_is_valid = api.nvim_buf_is_valid
+    original_buf_get_name = api.nvim_buf_get_name
+    original_getpos = vim.fn.getpos
+
+    package.loaded["overlook.peek.marks"] = nil
+    marks = require("overlook.peek.marks")
   end)
 
   after_each(function()
-    -- Restore original functions
     vim.notify = original_notify
     api.nvim_buf_is_loaded = original_buf_is_loaded
     api.nvim_buf_is_valid = original_buf_is_valid
     api.nvim_buf_get_name = original_buf_get_name
     vim.fn.getpos = original_getpos
-    -- Clean up any marks set? (Potentially needed depending on tests)
+    package.loaded["overlook.window"] = nil
+    package.loaded["overlook.peek.marks"] = nil
   end)
 
-  it("should return nil for invalid mark characters", function()
-    assert.is_nil(marks_adapter.get(""))
-    assert.are.equal(1, #notify_calls)
-    assert.matches("Invalid mark character", notify_calls[1].msg)
-
-    notify_calls = {} -- Reset for next check
-    assert.is_nil(marks_adapter.get("ab"))
-    assert.are.equal(1, #notify_calls)
-    assert.matches("Invalid mark character", notify_calls[1].msg)
+  it("notifies and does not open for invalid mark characters", function()
+    for _, bad in ipairs { "", "ab" } do
+      notify_calls = {}
+      marks(bad)
+      assert.are.equal(0, #open_popup_calls)
+      assert.are.equal(1, #notify_calls)
+      assert.matches("Invalid mark character", notify_calls[1].msg)
+    end
 
     notify_calls = {}
-    assert.is_nil(marks_adapter.get(nil))
+    marks(nil)
+    assert.are.equal(0, #open_popup_calls)
     assert.are.equal(1, #notify_calls)
     assert.matches("Invalid mark character", notify_calls[1].msg)
   end)
 
-  it("should return nil if mark is not set", function()
-    -- Mock getpos to simulate unset mark 'x'
+  it("notifies and does not open if the mark is not set", function()
     vim.fn.getpos = function(mark)
       if mark == "'x" then
-        return { 0, 0, 0, 0 } -- Unset position
+        return { 0, 0, 0, 0 }
       end
       return original_getpos(mark)
     end
 
-    assert.is_nil(marks_adapter.get("x"))
+    marks("x")
+    assert.are.equal(0, #open_popup_calls)
     assert.are.equal(1, #notify_calls)
     assert.matches("Mark 'x' is not set", notify_calls[1].msg)
   end)
 
-  it("should return nil if buffer is not loaded", function()
+  it("notifies and does not open if the buffer is not loaded", function()
     local mock_bufnr = 999
-    -- Mock getpos to return a valid position but for a specific buffer
     vim.fn.getpos = function(mark)
       if mark == "'l" then
         return { mock_bufnr, 10, 5, 0 }
       end
       return original_getpos(mark)
     end
-    -- Mock nvim_buf_is_loaded to return false for our mock buffer
     api.nvim_buf_is_loaded = function(bufnr)
       if bufnr == mock_bufnr then
         return false
@@ -86,12 +89,13 @@ describe("overlook.adapter.marks", function()
       return original_buf_is_loaded(bufnr)
     end
 
-    assert.is_nil(marks_adapter.get("l"))
+    marks("l")
+    assert.are.equal(0, #open_popup_calls)
     assert.are.equal(1, #notify_calls)
     assert.matches("Buffer for mark 'l' is not loaded", notify_calls[1].msg)
   end)
 
-  it("should return nil if buffer is not valid", function()
+  it("notifies and does not open if the buffer is not valid", function()
     local mock_bufnr = 998
     vim.fn.getpos = function(mark)
       if mark == "'v" then
@@ -102,46 +106,37 @@ describe("overlook.adapter.marks", function()
     api.nvim_buf_is_loaded = function(bufnr)
       if bufnr == mock_bufnr then
         return true
-      end -- Assume loaded
+      end
       return original_buf_is_loaded(bufnr)
     end
     api.nvim_buf_is_valid = function(bufnr)
       if bufnr == mock_bufnr then
         return false
-      end -- But invalid
+      end
       return original_buf_is_valid(bufnr)
     end
 
-    assert.is_nil(marks_adapter.get("v"))
+    marks("v")
+    assert.are.equal(0, #open_popup_calls)
     assert.are.equal(1, #notify_calls)
     assert.matches("Buffer for mark 'v' .* is invalid", notify_calls[1].msg)
   end)
 
-  it("should return opts table for a valid mark", function()
-    -- Setup a valid mark 'a' (e.g., pointing to current buffer, line 5, col 3)
+  it("opens a popup for a valid mark", function()
     local current_bufnr = api.nvim_get_current_buf()
     local current_buf_name = api.nvim_buf_get_name(current_bufnr)
-    local expected_lnum = 5
-    local expected_col = 3
 
     vim.fn.getpos = function(mark)
       if mark == "'a" then
-        return { current_bufnr, expected_lnum, expected_col, 0 }
+        return { current_bufnr, 5, 3, 0 }
       end
       return original_getpos(mark)
     end
-    -- Ensure buffer is considered loaded and valid for this test
     api.nvim_buf_is_loaded = function(bufnr)
-      if bufnr == current_bufnr then
-        return true
-      end
-      return original_buf_is_loaded(bufnr)
+      return bufnr == current_bufnr or original_buf_is_loaded(bufnr)
     end
     api.nvim_buf_is_valid = function(bufnr)
-      if bufnr == current_bufnr then
-        return true
-      end
-      return original_buf_is_valid(bufnr)
+      return bufnr == current_bufnr or original_buf_is_valid(bufnr)
     end
     api.nvim_buf_get_name = function(bufnr)
       if bufnr == current_bufnr then
@@ -150,13 +145,14 @@ describe("overlook.adapter.marks", function()
       return original_buf_get_name(bufnr)
     end
 
-    local opts = marks_adapter.get("a")
-    assert.is_table(opts)
-    assert.are.equal(current_bufnr, opts.target_bufnr)
-    assert.are.equal(expected_lnum, opts.lnum)
-    assert.are.equal(expected_col, opts.col)
-    assert.is_string(opts.title)
-    assert.matches(vim.fn.fnamemodify(current_buf_name, ":t"), opts.title) -- Check title contains filename
-    assert.are.equal(0, #notify_calls) -- No errors expected
+    marks("a")
+
+    assert.are.equal(1, #open_popup_calls)
+    local o = open_popup_calls[1]
+    assert.are.equal(current_bufnr, o.target_bufnr)
+    assert.are.equal(5, o.lnum)
+    assert.are.equal(3, o.col)
+    assert.is_string(o.title)
+    assert.are.equal(0, #notify_calls)
   end)
 end)
