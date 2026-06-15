@@ -211,7 +211,7 @@ function Popup:snapshot_state()
   self.opts.target_bufnr = api.nvim_win_get_buf(self.winid)
   local cursor = api.nvim_win_get_cursor(self.winid)
   self.opts.lnum = cursor[1]
-  -- opts.col is 1-indexed (the adapters use vim.fn.getpos which returns
+  -- opts.col is 1-indexed (the peek sources use vim.fn.getpos which returns
   -- 1-indexed); nvim_win_get_cursor returns 0-indexed. Convert.
   -- set_cursor_position converts back via math.max(0, col - 1) on restore.
   self.opts.col = cursor[2] + 1

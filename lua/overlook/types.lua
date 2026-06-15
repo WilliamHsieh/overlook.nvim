@@ -3,3 +3,12 @@
 ---@field lnum integer The line number to position the popup.
 ---@field col integer The column number to position the popup.
 ---@field title? string Optional title for the popup.
+
+--- A peek source is just a function. It gathers some context (the cursor, a
+--- mark, an LSP result, ...), builds OverlookPopupOptions, and hands them to
+--- `require("overlook.window").open_popup(opts)`. It opens nothing (and
+--- typically notifies) when there is nothing to peek. Async sources (e.g.
+--- vim.lsp.buf.*) simply call open_popup later from their own callback. The
+--- built-in sources live under `overlook.peek.*`; a custom source is any
+--- function following the same shape, bound to a key.
+---@alias OverlookPeekSource fun(...): nil
