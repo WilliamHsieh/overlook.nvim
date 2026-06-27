@@ -65,6 +65,7 @@ local M = {}
 ---@field min_width integer Minimum allowed width for any popup window.
 ---@field min_height integer Minimum allowed height for any popup window.
 ---@field size_ratio number Default size ratio (0.0 to 1.0) used to calculate initial size.
+---@field title_pos "left"|"center"|"right" Position of the popup title.
 ---@field keys? table<string, string> Keymaps specific to the popup UI.
 
 --- *OverlookOptions*
@@ -117,6 +118,9 @@ local defaults = {
 
     -- Default size ratio (0.0 to 1.0) used to calculate initial size.
     size_ratio = 0.65,
+
+    -- Position of the popup title. Accepts "left", "center", or "right".
+    title_pos = "center",
 
     -- Keymaps specific to the popup UI
     keys = {

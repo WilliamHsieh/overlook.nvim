@@ -20,6 +20,7 @@ local initial_mock_ui_config_table = {
   col_offset = 1,
   row_offset = 1,
   size_ratio = 0.8,
+  title_pos = "center",
   min_width = 10,
   min_height = 5,
   width_decrement = 2,
@@ -96,6 +97,35 @@ describe("Popup -- border resolution fallback chain", function()
     local p = Popup.new { target_bufnr = make_real_buf(), lnum = 1, col = 1 }
     assert.is_not_nil(p)
     assert.are.equal("rounded", p.win_config.border)
+  end)
+end)
+
+describe("Popup -- title position", function()
+  local original_winbar
+  local function make_real_buf()
+    local b = vim.api.nvim_create_buf(false, true)
+    vim.api.nvim_buf_set_lines(b, 0, -1, false, { "line" })
+    return b
+  end
+
+  before_each(function()
+    global_mock_config_module.reset_to_initial_state()
+    original_winbar = vim.o.winbar
+    vim.o.winbar = ""
+  end)
+
+  after_each(function()
+    global_mock_config_module.reset_to_initial_state()
+    vim.o.winbar = original_winbar
+  end)
+
+  it("uses Config.ui.title_pos for the popup title alignment", function()
+    global_mock_config_module.options.ui.title_pos = "right"
+
+    local p = Popup.new { target_bufnr = make_real_buf(), lnum = 1, col = 1 }
+
+    assert.is_not_nil(p)
+    assert.are.equal("right", p.win_config.title_pos)
   end)
 end)
 

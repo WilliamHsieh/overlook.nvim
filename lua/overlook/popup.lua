@@ -147,7 +147,7 @@ function Popup:determine_window_configuration(ctx)
   ---@diagnostic disable-next-line: assign-type-mismatch
   win_cfg.border = border
   win_cfg.title = self.opts.title or "Overlook default title"
-  win_cfg.title_pos = "center"
+  win_cfg.title_pos = Config.ui.title_pos
 
   self.win_config = win_cfg
   return true
