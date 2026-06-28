@@ -88,6 +88,7 @@ require("overlook").setup({
     min_width = 10,                 -- Minimum popup width
     min_height = 3,                 -- Minimum popup height
     size_ratio = 0.65,              -- Default size ratio (0.0 to 1.0)
+    title_pos = "center",           -- Popup title position: "left", "center", or "right"
     keys = {
       close = "q",                  -- Key to close the topmost popup
     },
