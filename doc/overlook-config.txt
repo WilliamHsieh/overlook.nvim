@@ -66,7 +66,7 @@ Fields ~
 {min_width} `(integer)` Minimum allowed width for any popup window.
 {min_height} `(integer)` Minimum allowed height for any popup window.
 {size_ratio} `(number)` Default size ratio (0.0 to 1.0) used to calculate initial size.
-{title_pos} `("left"|"center"|"right")` Position of the popup title.
+{title_pos} "`(left)`"|"center"|"right" Position of the popup title.
 {keys} `(optional)` `(table<string, string>)` Keymaps specific to the popup UI.
 
 ------------------------------------------------------------------------------
