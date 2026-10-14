@@ -93,6 +93,52 @@ describe("overlook.peek.definition", function()
     package.loaded["overlook.peek.definition"] = nil
   end)
 
+  it("opens a popup directly when there is a single result and on_multiple is select", function()
+    on_multiple = "select"
+    vim.lsp.buf.definition = function(o)
+      o.on_list {
+        items = {
+          { lnum = 12, col = 7, filename = "target.lua", user_data = { uri = "file:///tmp/target.lua" } },
+        },
+      }
+    end
+
+    definition()
+
+    assert.are.equal(0, #select_calls)
+    assert.are.equal(1, #open_popup_calls)
+    local o = open_popup_calls[1]
+    assert.are.equal(4242, o.target_bufnr)
+    assert.are.equal(12, o.lnum)
+    assert.are.equal(7, o.col)
+    assert.are.equal("target.lua", o.title)
+    assert.are.equal("file:///tmp/target.lua", seen_uris[1])
+    assert.are.equal(0, #notify_calls)
+  end)
+
+  it("opens a popup directly when there is a single result and on_multiple is a function", function()
+    local called = false
+    on_multiple = function()
+      called = true
+    end
+    vim.lsp.buf.definition = function(o)
+      o.on_list {
+        items = {
+          { lnum = 12, col = 7, filename = "target.lua", user_data = { uri = "file:///tmp/target.lua" } },
+        },
+      }
+    end
+
+    definition()
+
+    assert.is_false(called)
+    assert.are.equal(0, #select_calls)
+    assert.are.equal(1, #open_popup_calls)
+    assert.are.equal(12, open_popup_calls[1].lnum)
+    assert.are.equal("target.lua", open_popup_calls[1].title)
+    assert.are.equal(0, #notify_calls)
+  end)
+
   it("opens a popup directly when there is a single result", function()
     vim.lsp.buf.definition = function(o)
       o.on_list {
@@ -231,7 +277,7 @@ describe("overlook.peek.definition", function()
     assert.are.equal(0, #notify_calls)
   end)
 
-  it("falls back to vim.ui.select when on_multiple is not recognized", function()
+  it("falls back to first when on_multiple is not recognized", function()
     on_multiple = "quickfix"
     local first, second = two_definitions()
     vim.lsp.buf.definition = function(o)
@@ -241,10 +287,12 @@ describe("overlook.peek.definition", function()
     definition()
 
     assert.are.equal(1, #notify_calls)
-    assert.matches("on_multiple", notify_calls[1].msg)
+    assert.matches('using "first"', notify_calls[1].msg)
     assert.are.equal(vim.log.levels.WARN, notify_calls[1].level)
-    assert.are.equal(1, #select_calls)
-    assert.are.equal(0, #open_popup_calls)
+    assert.are.equal(0, #select_calls)
+    assert.are.equal(1, #open_popup_calls)
+    assert.are.equal(first.filename, open_popup_calls[1].title)
+    assert.are.equal(10, open_popup_calls[1].lnum)
   end)
 
   it("defaults on_multiple to first", function()
@@ -257,8 +305,75 @@ describe("overlook.peek.definition", function()
     assert.are.equal("first", config.get().on_multiple)
     config.setup { ui = { border = "single" } }
     assert.are.equal("first", config.get().on_multiple)
+    assert.are.equal(0, #notify_calls)
+
+    local handler = function() end
+    config.setup { on_multiple = handler }
+    assert.are.equal(handler, config.get().on_multiple)
+    assert.are.equal(0, #notify_calls)
+
+    config.setup { on_multiple = "quickfix" }
+    assert.are.equal("first", config.get().on_multiple)
+    assert.are.equal(1, #notify_calls)
+    assert.matches('using "first"', notify_calls[1].msg)
+    assert.are.equal(vim.log.levels.WARN, notify_calls[1].level)
 
     package.loaded["overlook.config"] = saved
+  end)
+
+  it("opens one popup when duplicate locations share uri, line, and column", function()
+    on_multiple = "select"
+    local item = lsp_item {
+      filename = "/tmp/dup-repro/lib.lua",
+      lnum = 3,
+      col = 12,
+      text = "function M.widget()",
+      user_data = { uri = "file:///tmp/dup-repro/lib.lua" },
+    }
+    vim.lsp.buf.definition = function(o)
+      o.on_list { items = { item, vim.deepcopy(item) } }
+    end
+
+    definition()
+
+    assert.are.equal(0, #select_calls)
+    assert.are.equal(1, #open_popup_calls)
+    assert.are.equal(3, open_popup_calls[1].lnum)
+    assert.are.equal(12, open_popup_calls[1].col)
+    assert.are.equal(item.filename, open_popup_calls[1].title)
+    assert.are.equal(0, #notify_calls)
+  end)
+
+  it("dedupes by filename when an item has no uri and keeps the first of each location", function()
+    on_multiple = "select"
+    local cwd = vim.fn.getcwd()
+    local first = lsp_item {
+      filename = cwd .. "/src/widget.cpp",
+      lnum = 10,
+      col = 3,
+      text = "  void Widget::draw()",
+      user_data = {},
+    }
+    local same_place = vim.deepcopy(first)
+    same_place.text = "different text, same location"
+    local second = lsp_item {
+      filename = cwd .. "/src/widget.h",
+      lnum = 4,
+      col = 8,
+      text = "void Widget::draw();",
+      user_data = { targetUri = "file:///src/widget.h" },
+    }
+    vim.lsp.buf.definition = function(o)
+      o.on_list { items = { first, same_place, second, vim.deepcopy(second) } }
+    end
+
+    definition()
+
+    assert.are.equal(1, #select_calls)
+    assert.are.equal(0, #open_popup_calls)
+    assert.are.equal(2, #select_calls[1].items)
+    assert.are.equal(first, select_calls[1].items[1])
+    assert.are.equal(second, select_calls[1].items[2])
   end)
 
   it("forwards location opts and keeps Overlook's on_list handler", function()

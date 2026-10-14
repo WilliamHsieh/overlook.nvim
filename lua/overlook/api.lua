@@ -31,6 +31,10 @@ local M = {}
 --- decides: `"first"` (the default) opens the first location, `"select"`
 --- prompts with `vim.ui.select`, and a function receives the list plus an opener.
 ---
+--- `require("overlook.peek.definition")(location_opts)` forwards those options
+--- to `vim.lsp.buf.definition`. A caller-supplied `on_list` is ignored and
+--- replaced with Overlook's handler.
+---
 --- If no LSP server is attached or no definition is found, displays an
 --- appropriate notification to the user.
 ---

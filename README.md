@@ -164,7 +164,7 @@ end
 vim.keymap.set("n", "<leader>pa", peek_alternate_file, { desc = "Peek alternate file" })
 ```
 
-Async sources (LSP, pickers) work the same way - they just call `open_popup` later from their own callback. For an LSP location list, call `require("overlook.peek.location").open(items, opts)` from `on_list`: one item opens a popup, and several items follow `on_multiple`. See `:h overlook-peek` for the full contract and `overlook.peek.*` for the built-in examples.
+Async sources (LSP, pickers) work the same way - they just call `open_popup` later from their own callback. For an LSP location list, call `require("overlook.peek.location").open(items, opts)` from `on_list`: one item opens a popup, and several items follow `on_multiple`. `require("overlook.peek.definition")(location_opts)` forwards those options to `vim.lsp.buf.definition`, but a caller-supplied `on_list` is ignored and replaced with Overlook's handler. See `:h overlook-peek` for the full contract and `overlook.peek.*` for the built-in examples.
 
 ## Development
 

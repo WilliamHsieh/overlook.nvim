@@ -5,7 +5,10 @@ local location = require("overlook.peek.location")
 --- opens directly. Several results follow `on_multiple` (see |overlook-config|).
 --- Guards the common "no definition" / malformed-result cases and does not
 --- open a popup in those cases.
----@param location_opts? vim.lsp.LocationOpts
+---
+--- `location_opts` is forwarded to `vim.lsp.buf.definition`. A caller-supplied
+--- `on_list` is ignored and replaced with Overlook's handler.
+---@param location_opts? vim.lsp.LocationOpts Forwarded to `vim.lsp.buf.definition`. `on_list` is ignored and overridden.
 ---@return nil
 return function(location_opts)
   vim.lsp.buf.definition(vim.tbl_extend("force", location_opts or {}, {

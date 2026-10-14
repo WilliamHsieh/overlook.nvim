@@ -14,6 +14,7 @@
 ---   the same list.
 --- - a function is called as `on_multiple(items, open_fn)`. `open_fn(item)`
 ---   opens that item through |overlook.window.open_popup|.
+--- - any other value warns and opens the first item.
 local M = {}
 
 ---@class OverlookLocationOpenOpts
@@ -81,8 +82,42 @@ local function resolve_on_multiple(value)
     return value
   end
 
-  vim.notify("Overlook: unknown on_multiple (" .. tostring(value) .. "); using vim.ui.select.", vim.log.levels.WARN)
-  return "select"
+  vim.notify("Overlook: unknown on_multiple (" .. tostring(value) .. '); using "first".', vim.log.levels.WARN)
+  return "first"
+end
+
+--- Identity of a quickfix-style LSP item: URI when present, otherwise filename,
+--- plus the 1-based line and column. `textDocument/definition` concatenates
+--- every client's results, so two servers on one buffer repeat the same spot.
+---@param item table
+---@return string?
+local function location_identity(item)
+  if type(item) ~= "table" then
+    return nil
+  end
+  local user_data = type(item.user_data) == "table" and item.user_data or {}
+  local uri = user_data.targetUri or user_data.uri
+  local where = (type(uri) == "string" and uri ~= "") and uri or (item.filename or "")
+  return table.concat({ where, tostring(tonumber(item.lnum) or 0), tostring(tonumber(item.col) or 0) }, "\0")
+end
+
+--- Drop later items that name the same location. The first occurrence stays,
+--- so the original order is preserved.
+---@param items table[]
+---@return table[]
+local function dedupe_items(items)
+  local seen = {}
+  local unique = {}
+  for _, item in ipairs(items) do
+    local key = location_identity(item)
+    if key == nil or not seen[key] then
+      if key ~= nil then
+        seen[key] = true
+      end
+      unique[#unique + 1] = item
+    end
+  end
+  return unique
 end
 
 --- Open a popup for an LSP location list.
@@ -90,6 +125,9 @@ end
 --- - Zero items: notify `empty_message` and return.
 --- - One item: open it directly, with no prompt.
 --- - Several items: follow |OverlookOnMultiple|.
+---
+--- Items that share a URI (or filename, when there is no URI), line, and
+--- column are collapsed to the first one before that decision.
 ---
 --- Cancelling `vim.ui.select` (or calling `open_fn` with `nil`) opens nothing.
 ---@param items? table[] Quickfix-style items from an LSP `on_list` callback.
@@ -101,6 +139,8 @@ function M.open(items, opts)
     vim.notify(opts.empty_message or "Overlook: No location found.", vim.log.levels.INFO)
     return
   end
+
+  items = dedupe_items(items)
 
   if #items == 1 then
     M.open_item(items[1], opts.no_uri_message)

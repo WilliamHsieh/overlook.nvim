@@ -62,6 +62,9 @@ fun(items: table[], open_fn: fun(item: table))
           Custom handler. `items` are quickfix-style LSP entries. Call
           `open_fn(item)` to open that location, or pass nil to open nothing.
 
+Any other value warns at |overlook-setup|() and when a peek runs, then
+falls back to "first".
+
 ------------------------------------------------------------------------------
 *OverlookOptions.UI*
 
@@ -91,7 +94,7 @@ Class ~
 
 Fields ~
 {ui} `(OverlookOptions.UI)` UI settings for the popup windows.
-{on_multiple}  `(Strategy)` when several LSP locations match: "first" (default), "select", or a function(items, open_fn).
+{on_multiple}  `(Strategy)` when several LSP locations match: "first" (default), "select", or a function(items, open_fn). Unknown values warn and fall back to "first".
 {on_stack_empty} `(optional)` `(fun())` Optional function called when the last Overlook popup closes.
 
 ------------------------------------------------------------------------------
@@ -160,6 +163,7 @@ Type ~
     -- A function(items, open_fn) handles the list itself. Call open_fn(item)
     -- to open that location in a popup, or open_fn(nil) to open nothing.
     -- require("overlook.peek.location").format_item formats an entry the same way.
+    -- Any other value warns and falls back to "first".
     on_multiple = "first",
 
     -- Optional hook called when the last Overlook popup closes
