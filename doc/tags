@@ -1,4 +1,5 @@
 OverlookBorderStyle	overlook-config.txt	/*OverlookBorderStyle*
+OverlookOnMultiple	overlook-config.txt	/*OverlookOnMultiple*
 OverlookOptions	overlook-config.txt	/*OverlookOptions*
 OverlookOptions.UI	overlook-config.txt	/*OverlookOptions.UI*
 overlook-api	overlook-api.txt	/*overlook-api*

@@ -17,7 +17,7 @@ Or you use a peek feature but can't fix that typo you just spotted.
 
 ## Key Features
 
-- 🔍 **Peek at definitions** - View LSP definitions, marks, or any location in floating windows
+- 🔍 **Peek at definitions** - View LSP definitions, marks, or any location in floating windows, and pick when several definitions match
 - ✏️ **Actually editable** - Spot a bug? Fix it right there in the popup and `:w` to save
 - 📚 **Visual stack navigation** - See your entire exploration path as cascading popups
 - 🔄 **Undo your exploration** - Accidentally closed a popup? Bring it back with `restore_popup()`
@@ -94,6 +94,21 @@ require("overlook").setup({
 })
 ```
 
+`peek_definition()` opens a popup immediately when the LSP returns one location. When it returns several, `on_multiple` decides:
+
+- `"select"` (default) prompts with `vim.ui.select`. Each entry is `relative/path:line: text`.
+- `"first"` opens the first location, which is how peek behaved before the picker.
+- a function `function(items, open_fn)` handles the list. Call `open_fn(item)` to open that location in a popup.
+
+```lua
+-- Always open the first definition, with no prompt:
+require("overlook").setup({
+  on_multiple = "first",
+})
+```
+
+No picker plugin is required. References and implementation can reuse the same helper (`overlook.peek.location`). See `:h OverlookOnMultiple`.
+
 The full, always-current list of options and their defaults lives in `:h overlook-config` - it is generated from the source annotations, so it can't drift out of sync.
 
 ## Usage
@@ -117,7 +132,7 @@ vim.keymap.set("n", "<leader>po", require("overlook.api").open_in_original_windo
 
 Check `:h overlook-api` for more details.
 
-- `peek_definition()` - Peek at the LSP definition under cursor
+- `peek_definition()` - Peek at the LSP definition under the cursor. One match opens a popup; several matches follow `on_multiple` (`vim.ui.select` by default)
 - `peek_cursor()` - Create a popup at current cursor position
 - `peek_mark()` - Prompt for a mark and peek at its location
 - `restore_popup()` - Restore the last closed popup
@@ -150,7 +165,7 @@ end
 vim.keymap.set("n", "<leader>pa", peek_alternate_file, { desc = "Peek alternate file" })
 ```
 
-Async sources (LSP, pickers) work the same way - they just call `open_popup` later from their own callback. See `:h overlook-peek` for the full contract and `overlook.peek.*` for the built-in examples.
+Async sources (LSP, pickers) work the same way - they just call `open_popup` later from their own callback. For an LSP location list, call `require("overlook.peek.location").open(items, opts)` from `on_list`: one item opens a popup, and several items follow `on_multiple`. See `:h overlook-peek` for the full contract and `overlook.peek.*` for the built-in examples.
 
 ## Development
 

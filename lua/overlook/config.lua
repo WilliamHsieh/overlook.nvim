@@ -49,6 +49,20 @@ local M = {}
 ---| "shadow"     Border with shadow effect
 ---| string[]     Custom border array as defined by nvim_open_win
 
+--- *OverlookOnMultiple*
+---
+--- What to do when an LSP peek returns more than one location. A single
+--- location always opens a popup directly and never prompts.
+---
+---@alias OverlookOnMultiple
+---| "select" Prompt with vim.ui.select. Entries are "relative/path:line: text".
+---           The path is relative to the working directory. Line text is trimmed.
+---           This is the default.
+---| "first"  Open the first location without prompting.
+---| fun(items: table[], open_fn: fun(item: table))
+---           Custom handler. `items` are quickfix-style LSP entries. Call
+---           `open_fn(item)` to open that location, or pass nil to open nothing.
+
 --- *OverlookOptions.UI*
 ---
 ---@class OverlookOptions.UI
@@ -72,6 +86,7 @@ local M = {}
 ---@class OverlookOptions
 ---
 ---@field ui OverlookOptions.UI UI settings for the popup windows.
+---@field on_multiple OverlookOnMultiple Strategy when several LSP locations match: "select" (default), "first", or a function(items, open_fn).
 ---@field on_stack_empty? fun() Optional function called when the last Overlook popup closes.
 
 --- Default configuration options for overlook.nvim.
@@ -126,6 +141,16 @@ local defaults = {
       close = "q", -- Key to close the topmost popup
     },
   },
+
+  -- How to handle an LSP peek that returns more than one location.
+  -- A single location always opens directly and never prompts.
+  -- "select" (default) calls vim.ui.select. Entries are formatted as
+  -- "relative/path:line: text".
+  -- "first" opens the first location (the previous behavior).
+  -- A function(items, open_fn) handles the list itself. Call open_fn(item)
+  -- to open that location in a popup, or open_fn(nil) to open nothing.
+  -- require("overlook.peek.location").format_item formats an entry the same way.
+  on_multiple = "select",
 
   -- Optional hook called when the last Overlook popup closes
   on_stack_empty = nil,
