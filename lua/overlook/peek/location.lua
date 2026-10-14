@@ -6,10 +6,12 @@
 ---
 --- One item opens immediately. Several items follow |OverlookOnMultiple|
 --- (`on_multiple` in |overlook-config|):
---- - `"select"` (default) calls `vim.ui.select`. Entries are
+--- - `"first"` (default) opens the first item.
+--- - `"select"` calls `vim.ui.select`. Entries are
 ---   `relative/path:line: text` (path relative to the working directory, line
----   text trimmed).
---- - `"first"` opens the first item.
+---   text trimmed). A UI that replaces `vim.ui.select`, such as
+---   telescope-ui-select or `require("fzf-lua").register_ui_select()`, receives
+---   the same list.
 --- - a function is called as `on_multiple(items, open_fn)`. `open_fn(item)`
 ---   opens that item through |overlook.window.open_popup|.
 local M = {}
@@ -68,14 +70,14 @@ function M.open_item(item, no_uri_message)
 end
 
 --- Resolve `on_multiple`, warning when the configured value is not recognized.
---- `nil` is treated as the default `"select"` so a partial config still prompts.
+--- `nil` uses the default `"first"` so a partial config keeps the previous behavior.
 ---@param value any
 ---@return "select"|"first"|fun(items: table[], open_fn: fun(item: table))
 local function resolve_on_multiple(value)
-  if value == nil or value == "select" then
-    return "select"
+  if value == nil or value == "first" then
+    return "first"
   end
-  if value == "first" or type(value) == "function" then
+  if value == "select" or type(value) == "function" then
     return value
   end
 

@@ -28,8 +28,8 @@ local M = {}
 ---
 --- A single location opens directly. When the server returns several
 --- locations, |OverlookOnMultiple| (`on_multiple` in |overlook-config|)
---- decides: `"select"` (the default) prompts with `vim.ui.select`, `"first"`
---- opens the first location, and a function receives the list plus an opener.
+--- decides: `"first"` (the default) opens the first location, `"select"`
+--- prompts with `vim.ui.select`, and a function receives the list plus an opener.
 ---
 --- If no LSP server is attached or no definition is found, displays an
 --- appropriate notification to the user.

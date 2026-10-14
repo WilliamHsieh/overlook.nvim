@@ -45,7 +45,7 @@ describe("overlook.peek.definition", function()
     notify_calls = {}
     select_calls = {}
     seen_uris = {}
-    on_multiple = "select"
+    on_multiple = "first"
 
     package.loaded["overlook.window"] = {
       open_popup = function(opts)
@@ -116,6 +116,7 @@ describe("overlook.peek.definition", function()
   end)
 
   it("prompts with vim.ui.select for multiple results and opens the choice", function()
+    on_multiple = "select"
     local first, second = two_definitions()
     vim.lsp.buf.definition = function(o)
       o.on_list { items = { first, second } }
@@ -147,6 +148,7 @@ describe("overlook.peek.definition", function()
   end)
 
   it("opens nothing when vim.ui.select is cancelled", function()
+    on_multiple = "select"
     local first, second = two_definitions()
     vim.lsp.buf.definition = function(o)
       o.on_list { items = { first, second } }
@@ -159,8 +161,7 @@ describe("overlook.peek.definition", function()
     assert.are.equal(0, #notify_calls)
   end)
 
-  it("opens the first location when on_multiple is 'first'", function()
-    on_multiple = "first"
+  it("opens the first location by default when several results match", function()
     local first, second = two_definitions()
     vim.lsp.buf.definition = function(o)
       o.on_list { items = { first, second } }
@@ -175,6 +176,20 @@ describe("overlook.peek.definition", function()
     assert.are.equal(first.filename, open_popup_calls[1].title)
     assert.are.equal("file:///src/widget.cpp", seen_uris[1])
     assert.are.equal(0, #notify_calls)
+  end)
+
+  it("treats a missing on_multiple as first", function()
+    on_multiple = nil
+    local first, second = two_definitions()
+    vim.lsp.buf.definition = function(o)
+      o.on_list { items = { first, second } }
+    end
+
+    definition()
+
+    assert.are.equal(0, #select_calls)
+    assert.are.equal(1, #open_popup_calls)
+    assert.are.equal(first.filename, open_popup_calls[1].title)
   end)
 
   it("calls a custom on_multiple function with the items and an opener", function()
@@ -230,6 +245,20 @@ describe("overlook.peek.definition", function()
     assert.are.equal(vim.log.levels.WARN, notify_calls[1].level)
     assert.are.equal(1, #select_calls)
     assert.are.equal(0, #open_popup_calls)
+  end)
+
+  it("defaults on_multiple to first", function()
+    local saved = package.loaded["overlook.config"]
+    package.loaded["overlook.config"] = nil
+    local config = require("overlook.config")
+
+    assert.are.equal("first", config.get().on_multiple)
+    config.setup()
+    assert.are.equal("first", config.get().on_multiple)
+    config.setup { ui = { border = "single" } }
+    assert.are.equal("first", config.get().on_multiple)
+
+    package.loaded["overlook.config"] = saved
   end)
 
   it("forwards location opts and keeps Overlook's on_list handler", function()

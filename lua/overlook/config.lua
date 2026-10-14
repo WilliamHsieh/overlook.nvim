@@ -55,10 +55,11 @@ local M = {}
 --- location always opens a popup directly and never prompts.
 ---
 ---@alias OverlookOnMultiple
+---| "first"  Open the first location without prompting. This is the default.
 ---| "select" Prompt with vim.ui.select. Entries are "relative/path:line: text".
 ---           The path is relative to the working directory. Line text is trimmed.
----           This is the default.
----| "first"  Open the first location without prompting.
+---           Any vim.ui.select UI works, including telescope-ui-select and
+---           `require("fzf-lua").register_ui_select()`.
 ---| fun(items: table[], open_fn: fun(item: table))
 ---           Custom handler. `items` are quickfix-style LSP entries. Call
 ---           `open_fn(item)` to open that location, or pass nil to open nothing.
@@ -86,7 +87,7 @@ local M = {}
 ---@class OverlookOptions
 ---
 ---@field ui OverlookOptions.UI UI settings for the popup windows.
----@field on_multiple OverlookOnMultiple Strategy when several LSP locations match: "select" (default), "first", or a function(items, open_fn).
+---@field on_multiple OverlookOnMultiple Strategy when several LSP locations match: "first" (default), "select", or a function(items, open_fn).
 ---@field on_stack_empty? fun() Optional function called when the last Overlook popup closes.
 
 --- Default configuration options for overlook.nvim.
@@ -144,13 +145,14 @@ local defaults = {
 
   -- How to handle an LSP peek that returns more than one location.
   -- A single location always opens directly and never prompts.
-  -- "select" (default) calls vim.ui.select. Entries are formatted as
-  -- "relative/path:line: text".
-  -- "first" opens the first location (the previous behavior).
+  -- "first" (default) opens the first location, matching the previous behavior.
+  -- "select" calls vim.ui.select. Entries are formatted as
+  -- "relative/path:line: text". telescope-ui-select and
+  -- require("fzf-lua").register_ui_select() work by replacing vim.ui.select.
   -- A function(items, open_fn) handles the list itself. Call open_fn(item)
   -- to open that location in a popup, or open_fn(nil) to open nothing.
   -- require("overlook.peek.location").format_item formats an entry the same way.
-  on_multiple = "select",
+  on_multiple = "first",
 
   -- Optional hook called when the last Overlook popup closes
   on_stack_empty = nil,
